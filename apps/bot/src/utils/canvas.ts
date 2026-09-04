@@ -156,6 +156,70 @@ function drawAnalyticsIcon(ctx: SKRSContext2D, cx: number, cy: number, size: num
   ctx.restore();
 }
 
+function drawDiamondIcon(ctx: SKRSContext2D, cx: number, cy: number, size: number, color = '#f47fff') {
+  ctx.save();
+  ctx.translate(cx, cy);
+  const w = size;
+  const h = size;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.35, -h * 0.45);
+  ctx.lineTo(w * 0.35, -h * 0.45);
+  ctx.lineTo(w * 0.5, -h * 0.1);
+  ctx.lineTo(0, h * 0.5);
+  ctx.lineTo(-w * 0.5, -h * 0.1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.2, -h * 0.45);
+  ctx.lineTo(0, -h * 0.1);
+  ctx.lineTo(w * 0.2, -h * 0.45);
+  ctx.moveTo(0, -h * 0.1);
+  ctx.lineTo(0, h * 0.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawMaleIcon(ctx: SKRSContext2D, cx: number, cy: number, size: number, color = '#3498db') {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.8;
+  const r = size * 0.28;
+  ctx.beginPath();
+  ctx.arc(-size * 0.12, size * 0.12, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(size * 0.08, -size * 0.08);
+  ctx.lineTo(size * 0.4, -size * 0.4);
+  ctx.lineTo(size * 0.18, -size * 0.4);
+  ctx.moveTo(size * 0.4, -size * 0.4);
+  ctx.lineTo(size * 0.4, -size * 0.18);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawFemaleIcon(ctx: SKRSContext2D, cx: number, cy: number, size: number, color = '#e91e63') {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.8;
+  const r = size * 0.28;
+  ctx.beginPath();
+  ctx.arc(0, -size * 0.15, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, size * 0.13);
+  ctx.lineTo(0, size * 0.45);
+  ctx.moveTo(-size * 0.18, size * 0.28);
+  ctx.lineTo(size * 0.18, size * 0.28);
+  ctx.stroke();
+  ctx.restore();
+}
+
 // ─────────────────────────────────────────────────────────────
 // SHIP CARD
 // ─────────────────────────────────────────────────────────────
@@ -1645,13 +1709,13 @@ export async function createSayCard(opts: SayCardOptions): Promise<Buffer> {
 
     const boxes = [
       // Satır 1
-      { label: 'TOPLAM ÜYE', val: opts.totalMembers, color: '#5865F2', sub: 'Sunucu Geneli' },
-      { label: 'ÇEVRİM İÇİ', val: opts.onlineMembers, color: '#2ecc71', sub: 'Aktif Üyeler' },
-      { label: 'SESTEKİLER', val: opts.voiceMembers, color: '#e67e22', sub: 'Ses Odalarında' },
+      { label: 'TOPLAM ÜYE', val: opts.totalMembers, color: '#5865F2', sub: 'Sunucu Geneli', icon: null },
+      { label: 'ÇEVRİM İÇİ', val: opts.onlineMembers, color: '#2ecc71', sub: 'Aktif Üyeler', icon: null },
+      { label: 'SESTEKİLER', val: opts.voiceMembers, color: '#e67e22', sub: 'Ses Odalarında', icon: null },
       // Satır 2
-      { label: '♂️ ERKEK ÜYE', val: opts.maleCount!, color: '#3498db', sub: 'Kayıtlı Erkekler' },
-      { label: '♀️ KIZ ÜYE', val: opts.femaleCount!, color: '#e91e63', sub: 'Kayıtlı Kızlar' },
-      { label: '💎 BOOST SAYISI', val: opts.boostCount, color: '#f47fff', sub: 'Takviyeler' },
+      { label: 'ERKEK ÜYE', val: opts.maleCount!, color: '#3498db', sub: 'Kayıtlı Erkekler', icon: 'male' },
+      { label: 'KIZ ÜYE', val: opts.femaleCount!, color: '#e91e63', sub: 'Kayıtlı Kızlar', icon: 'female' },
+      { label: 'BOOST SAYISI', val: opts.boostCount, color: '#f47fff', sub: 'Takviyeler', icon: 'boost' },
     ];
 
     boxes.forEach((b, i) => {
@@ -1674,11 +1738,23 @@ export async function createSayCard(opts: SayCardOptions): Promise<Buffer> {
       ctx.fillRect(bx, by, 4, boxH);
       ctx.restore();
 
-      // Metinler
+      // Metinler ve Vektör İkonlar
       ctx.save();
+      let textX = bx + 16;
+      if (b.icon === 'male') {
+        drawMaleIcon(ctx, bx + 22, by + 21, 14, b.color);
+        textX = bx + 36;
+      } else if (b.icon === 'female') {
+        drawFemaleIcon(ctx, bx + 22, by + 21, 14, b.color);
+        textX = bx + 36;
+      } else if (b.icon === 'boost') {
+        drawDiamondIcon(ctx, bx + 22, by + 21, 14, b.color);
+        textX = bx + 36;
+      }
+
       ctx.font = 'bold 11px sans-serif';
       ctx.fillStyle = b.color;
-      ctx.fillText(b.label, bx + 16, by + 24);
+      ctx.fillText(b.label, textX, by + 24);
 
       ctx.font = 'bold 30px sans-serif';
       ctx.fillStyle = '#ffffff';
@@ -1698,10 +1774,10 @@ export async function createSayCard(opts: SayCardOptions): Promise<Buffer> {
     const gap = 18;
 
     const boxes = [
-      { label: 'TOPLAM ÜYE', val: opts.totalMembers, color: '#5865F2', sub: 'Sunucu Geneli' },
-      { label: 'ÇEVRİM İÇİ', val: opts.onlineMembers, color: '#2ecc71', sub: 'Aktif Üyeler' },
-      { label: 'SESTEKİLER', val: opts.voiceMembers, color: '#e67e22', sub: 'Ses Odalarında' },
-      { label: 'BOOST SAYISI', val: opts.boostCount, color: '#f47fff', sub: 'Takviyeler' },
+      { label: 'TOPLAM ÜYE', val: opts.totalMembers, color: '#5865F2', sub: 'Sunucu Geneli', icon: null },
+      { label: 'ÇEVRİM İÇİ', val: opts.onlineMembers, color: '#2ecc71', sub: 'Aktif Üyeler', icon: null },
+      { label: 'SESTEKİLER', val: opts.voiceMembers, color: '#e67e22', sub: 'Ses Odalarında', icon: null },
+      { label: 'BOOST SAYISI', val: opts.boostCount, color: '#f47fff', sub: 'Takviyeler', icon: 'boost' },
     ];
 
     boxes.forEach((b, i) => {
@@ -1721,11 +1797,16 @@ export async function createSayCard(opts: SayCardOptions): Promise<Buffer> {
       ctx.fillRect(bx + 16, boxY, boxW - 32, 3);
       ctx.restore();
 
-      // Metinler
+      // Metinler ve Vektör İkonlar
       ctx.save();
+      let textX = bx + 16;
+      if (b.icon === 'boost') {
+        drawDiamondIcon(ctx, bx + 22, boxY + 25, 14, b.color);
+        textX = bx + 36;
+      }
       ctx.font = 'bold 11px sans-serif';
       ctx.fillStyle = b.color;
-      ctx.fillText(b.label, bx + 16, boxY + 28);
+      ctx.fillText(b.label, textX, boxY + 28);
 
       ctx.font = 'bold 36px sans-serif';
       ctx.fillStyle = '#ffffff';
