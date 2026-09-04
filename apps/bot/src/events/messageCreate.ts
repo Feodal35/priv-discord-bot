@@ -15,8 +15,9 @@ export const CONFESSION_CHANNEL_ID = '1545496276576116878';
 export async function onMessageCreate(message: Message) {
   if (!message.guild || message.author.bot) return;
 
-  // Mesajı silinme ve düzenlenme logları için önbelleğe al
-  messageCacheService.set(message);
+  try {
+    // Mesajı silinme ve düzenlenme logları için önbelleğe al
+    messageCacheService.set(message);
 
   // 1. Selfie & Fotoğraf Kanalı Kuralı (1543271245779566703)
   if (message.channelId === PHOTO_CHANNEL_ID) {
@@ -107,8 +108,11 @@ export async function onMessageCreate(message: Message) {
     message.guild.id,
     message.author.id,
     message.channel instanceof TextChannel ? message.channel : undefined,
-    message.client
-  );
+    message.client,
+    { username: message.author.username, avatar: message.author.avatar }
+  ).catch((err) => {
+    logger.error('[XP] recordMessage hatası:', err);
+  });
 
   // 3. XP & Seviye Kazanımı
   if (message.channel instanceof TextChannel) {
@@ -117,7 +121,13 @@ export async function onMessageCreate(message: Message) {
       message.author.id,
       message.content,
       message.channel,
-      message.client
-    );
+      message.client,
+      { username: message.author.username, avatar: message.author.avatar }
+    ).catch((err) => {
+      logger.error('[XP] addMessageXp hatası:', err);
+    });
+  }
+  } catch (err) {
+    logger.error('[MESSAGE_CREATE] Beklenmeyen hata:', err);
   }
 }

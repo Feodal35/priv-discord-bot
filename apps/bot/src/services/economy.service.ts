@@ -1,5 +1,6 @@
 import { prisma } from '@priv/database';
 import { guildService } from './guild.service';
+import { userService } from './user.service';
 import { questService } from './quest.service';
 import { formatCurrency } from '@priv/shared';
 
@@ -47,6 +48,10 @@ export class EconomyService {
         message: `Tek seferde en fazla **${formatCurrency(settings.maxTransferAmount)} ${settings.currencyName}** gönderebilirsin.`,
       };
     }
+
+    // Kullanıcıların ve Guild'in veritabanında var olduğundan emin ol
+    await userService.ensureUserAndGuild(fromUserId, guildId);
+    await userService.ensureUserAndGuild(toUserId, guildId);
 
     // Sender bakiye kontrolü ve transaction
     try {
@@ -192,6 +197,8 @@ export class EconomyService {
     type: 'ADD' | 'REMOVE',
     reason?: string
   ) {
+    await userService.ensureUserAndGuild(userId, guildId);
+
     if (type === 'ADD') {
       return prisma.$transaction([
         prisma.userGuild.upsert({

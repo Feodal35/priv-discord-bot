@@ -4,23 +4,40 @@ import { Client } from 'discord.js';
 import { voiceService } from './voice.service';
 
 export class UserService {
-  public async getOrCreateUser(userId: string, username: string, avatar?: string | null) {
+  public async getOrCreateUser(userId: string, username?: string, avatar?: string | null) {
+    const defaultName = username || 'Kullanıcı';
     return prisma.user.upsert({
       where: { id: userId },
       update: {
-        username,
-        avatar,
+        ...(username ? { username } : {}),
+        ...(avatar !== undefined ? { avatar } : {}),
       },
       create: {
         id: userId,
-        username,
-        avatar,
+        username: defaultName,
+        avatar: avatar ?? null,
+      },
+    });
+  }
+
+  public async ensureUserAndGuild(userId: string, guildId: string, username?: string, avatar?: string | null) {
+    await this.getOrCreateUser(userId, username, avatar);
+    await prisma.guild.upsert({
+      where: { id: guildId },
+      update: {},
+      create: {
+        id: guildId,
+        name: 'Priv Sunucusu',
+        ownerId: '',
+        settings: {
+          create: {},
+        },
       },
     });
   }
 
   public async getOrCreateUserGuild(userId: string, guildId: string, username?: string, avatar?: string | null) {
-    await this.getOrCreateUser(userId, username || 'Bilinmeyen Kullanıcı', avatar);
+    await this.ensureUserAndGuild(userId, guildId, username, avatar);
 
     return prisma.userGuild.upsert({
       where: {

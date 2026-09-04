@@ -10,6 +10,7 @@ import {
   ButtonStyle,
 } from 'discord.js';
 import { guildService } from './guild.service';
+import { userService } from './user.service';
 import { xpService } from './xp.service';
 import { questService } from './quest.service';
 import { createEmbed } from '../utils/embed';
@@ -75,6 +76,7 @@ export class VoiceService {
           session.lastFlushedAt += flushSeconds * 1000;
 
           try {
+            await userService.ensureUserAndGuild(userId, guildId);
             await prisma.userGuild.upsert({
               where: { userId_guildId: { userId, guildId } },
               update: {
@@ -171,6 +173,7 @@ export class VoiceService {
         if (oldState.channelId !== afkChannelId) {
           // Kalan saniyeleri veritabanına işle
           if (unFlushedSeconds >= 5) {
+            await userService.ensureUserAndGuild(userId, guildId).catch(() => {});
             await prisma.userGuild.upsert({
               where: { userId_guildId: { userId, guildId } },
               update: {

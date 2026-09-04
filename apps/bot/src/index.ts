@@ -3,6 +3,15 @@ import { createDiscordClient } from './client';
 import { logger } from './utils/logger';
 import { checkDatabaseConnection } from '@priv/database';
 
+// Global çökme önleyici hata yakalayıcılar
+process.on('unhandledRejection', (reason: any) => {
+  logger.error('Unhandled Promise Rejection:', reason);
+});
+
+process.on('uncaughtException', (err: Error) => {
+  logger.error('Uncaught Exception:', err);
+});
+
 async function bootstrap() {
   logger.info('🚀 Priv Bot başlatılıyor...', { service: 'BOOTSTRAP' });
 
@@ -23,6 +32,10 @@ async function bootstrap() {
 
   // 3. Discord Client oluştur ve bağlan
   const client = createDiscordClient();
+
+  client.on('error', (err) => {
+    logger.error('Discord Client hatası:', err);
+  });
 
   try {
     await client.login(config.DISCORD_TOKEN);
