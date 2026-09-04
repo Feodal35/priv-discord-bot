@@ -63,10 +63,10 @@ export async function onMessageCreate(message: Message) {
   const isLink = await guardService.handleLinkCheck(message);
   if (isLink) return;
 
-  // 1.8. Kelime Türetmece Oyunu Kanalı
+  // 1.8. Kelime Türetmece Oyunu Kanalı (Sohbet ve diğer işlemler engellenir)
   const isWordGame = await wordGameService.handleMessage(message);
   if (isWordGame) {
-    // Kelime oyunu mesajı işlendi, normal akışa devam et (XP alabilir)
+    return;
   }
 
   // 2. AutoMod Denetimi
