@@ -3,6 +3,8 @@ import { Client, TextChannel } from 'discord.js';
 import { guildService } from './guild.service';
 import { createSuccessEmbed } from '../utils/embed';
 
+export const DEFAULT_BIRTHDAY_CHANNEL_ID = '1542620110882349162';
+
 export class BirthdayService {
   private timer: NodeJS.Timeout | null = null;
 
@@ -81,20 +83,26 @@ export class BirthdayService {
 
       for (const b of birthdays) {
         const settings = await guildService.getGuildSettings(b.guildId);
-        if (!settings.birthdayChannelId) continue;
+        const targetChannelId = settings.birthdayChannelId || DEFAULT_BIRTHDAY_CHANNEL_ID;
+        if (!targetChannelId) continue;
 
         try {
           const guild = await client.guilds.fetch(b.guildId).catch(() => null);
           if (!guild) continue;
 
-          const channel = (await guild.channels.fetch(settings.birthdayChannelId).catch(() => null)) as TextChannel | null;
+          const channel = (await guild.channels.fetch(targetChannelId).catch(() => null)) as TextChannel | null;
           if (channel) {
-            const embed = createSuccessEmbed(
-              '🎉 Doğum Günün Kutlu Olsun!',
-              `🎂 Bugün <@${b.userId}> üyemizin doğum günü!\n\nPriv ailesi olarak sağlıklı, mutlu ve neşeli bir yaş dileriz! Nice senelere! 🥳🎈`
-            );
+            const member = await guild.members.fetch(b.userId).catch(() => null);
 
-            await channel.send({ content: `@everyone 🎉 Doğum günü var!`, embeds: [embed] }).catch(() => {});
+            const embed = createSuccessEmbed(
+              '🎂 Doğum Günün Kutlu Olsun!',
+              `🎉 Bugün <@${b.userId}> üyemizin doğum günü!\n\n` +
+              `✨ Priv ailesi olarak yeni yaşının sana sağlık, mutluluk ve başarı getirmesini dileriz! Nice mutlu senelere! 🥳🎈🎁\n\n` +
+              `💰 **Doğum Günü Hediyesi:** \`+1.000 Coin\` hesabına eklendi!`
+            );
+            if (member) embed.setThumbnail(member.displayAvatarURL());
+
+            await channel.send({ content: `🎉 Bugün bir doğum günü var! <@${b.userId}>`, embeds: [embed] }).catch(() => {});
 
             // Doğum günü rolü varsa ekle
             if (settings.birthdayRoleId) {
