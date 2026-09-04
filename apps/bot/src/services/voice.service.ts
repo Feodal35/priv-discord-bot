@@ -14,6 +14,8 @@ import { xpService } from './xp.service';
 import { createEmbed } from '../utils/embed';
 import { DEFAULT_COLORS } from '@priv/shared';
 
+export const DEFAULT_TEMP_VOICE_CHANNEL_ID = '1545543780818755626';
+
 export class VoiceService {
   // Aktif ses oturumları (guildId-userId -> { channelId, joinedAt })
   private activeSessions = new Map<string, { channelId: string; joinedAt: number }>();
@@ -28,16 +30,24 @@ export class VoiceService {
     const settings = await guildService.getGuildSettings(guildId);
 
     // 1. DİNAMİK GEÇİCİ SES ODASI OLUŞTURMA (Join-to-create)
-    if (
-      settings.voiceEnabled &&
-      settings.tempVoiceCreateChannelId &&
-      newState.channelId === settings.tempVoiceCreateChannelId
-    ) {
-      await this.createTempVoiceChannel(newState, settings.tempVoiceCategoryId);
+    const isJoinToCreate =
+      newState.channelId === DEFAULT_TEMP_VOICE_CHANNEL_ID ||
+      (settings.voiceEnabled &&
+        settings.tempVoiceCreateChannelId &&
+        newState.channelId === settings.tempVoiceCreateChannelId);
+
+    if (isJoinToCreate) {
+      const categoryId = newState.channel?.parentId || settings.tempVoiceCategoryId;
+      await this.createTempVoiceChannel(newState, categoryId);
     }
 
     // 2. BOŞALAN GEÇİCİ KANALI SİLME
-    if (oldState.channelId && oldState.channelId !== newState.channelId) {
+    if (
+      oldState.channelId &&
+      oldState.channelId !== newState.channelId &&
+      oldState.channelId !== DEFAULT_TEMP_VOICE_CHANNEL_ID &&
+      oldState.channelId !== settings.tempVoiceCreateChannelId
+    ) {
       const tempChannel = await prisma.temporaryVoiceChannel.findUnique({
         where: { channelId: oldState.channelId },
       });
