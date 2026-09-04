@@ -16,6 +16,7 @@ import { registerService } from '../services/register.service';
 import { initVoiceSessionsFromGuilds } from './voiceStateUpdate';
 import { giveawayService } from '../services/giveaway.service';
 import { wordGameService } from '../services/wordGame.service';
+import { boosterColorService } from '../services/boosterColor.service';
 
 // Botun 7/24 bağlı kalacağı kalıcı ses kanalı
 export const AUTO_JOIN_CHANNEL_ID = '1543030493224632331';
@@ -106,6 +107,11 @@ export async function onReady(client: Client) {
   } catch (err) {
     logger.error('[WORD_GAME] Kelime oyunu başlangıç yükleme hatası:', err);
   }
+
+  // 4.3. Booster özel renk panelini kontrol et ve kur/güncelle (Kanal: 1545558510568480859)
+  boosterColorService.autoDeployPanel(client).catch((err) => {
+    logger.error('Booster renk paneli deploy hatası:', err);
+  });
 
   // 5. Sabit ses kanalına otomatik 7/24 bağlan
   await connectToPersistentVoice(client);

@@ -40,6 +40,7 @@ import { hatirlatCommand } from './commands/utility/hatirlat';
 import { sayCommand } from './commands/utility/say';
 import { rolPanelCommand } from './commands/utility/rolPanel';
 import { cekilisCommand } from './commands/utility/cekilis';
+import { boosterRenkCommand } from './commands/utility/boosterRenk';
 
 // Ses Komutları
 import { voiceCommand } from './commands/voice/voice';
@@ -116,6 +117,7 @@ const allCommands: SlashCommand[] = [
   sayCommand,
   rolPanelCommand,
   cekilisCommand,
+  boosterRenkCommand,
   voiceCommand,
   gitCommand,
   cekCommand,

@@ -29,6 +29,7 @@ import { voiceService } from '../services/voice.service';
 import { giveawayService } from '../services/giveaway.service';
 import { blackjackService } from '../services/blackjack.service';
 import { economyService } from '../services/economy.service';
+import { boosterColorService } from '../services/boosterColor.service';
 import { createEmbed, createSuccessEmbed, createErrorEmbed, createWarningEmbed, createInfoEmbed } from '../utils/embed';
 import { DEFAULT_COLORS, EMOJIS, RARITY, RarityType, formatCurrency, formatHours, calculateShipPercentage } from '@priv/shared';
 import { createShipImage } from '../utils/canvas';
@@ -37,6 +38,12 @@ import { getShipComment, generateShipName } from '../commands/games/ship';
 export async function handleButtonInteraction(interaction: ButtonInteraction) {
   const { customId, user, guild } = interaction;
   if (!guild) return;
+
+  // -2. BOOSTER ÖZEL RENK PANELİ BUTONLARI
+  if (customId.startsWith('booster_color_')) {
+    await boosterColorService.handleButton(interaction);
+    return;
+  }
 
   // -1. KAYIT SİSTEMİ BUTONLARI (Erkek / Kız Kayıt)
   if (customId.startsWith('reg_male_') || customId.startsWith('reg_female_')) {
