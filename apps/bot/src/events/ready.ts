@@ -4,9 +4,21 @@ import { voiceService } from '../services/voice.service';
 import { reminderService } from '../services/reminder.service';
 import { birthdayService } from '../services/birthday.service';
 import { guildService } from '../services/guild.service';
+import { deployCommands } from '../deploy-commands';
 
 export async function onReady(client: Client) {
   logger.info(`🤖 ${client.user?.tag} başarıyla Discord'a bağlandı!`, { service: 'READY' });
+
+  // 0. Komutları Discord'a otomatik senkronize et (Sunuculara anında yansır)
+  try {
+    for (const [guildId] of client.guilds.cache) {
+      await deployCommands(guildId);
+    }
+    await deployCommands();
+    logger.info(`✅ Tüm eğik çizgi (/) komutları Discord'a başarıyla senkronize edildi!`, { service: 'READY' });
+  } catch (err) {
+    logger.error('Komutlar senkronize edilirken hata oluştu:', err);
+  }
 
   // Bot aktivitesi ayarla
   client.user?.setActivity({
