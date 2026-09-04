@@ -8,6 +8,7 @@ import {
   ChannelType,
   PermissionFlagsBits,
   TextChannel,
+  AttachmentBuilder,
 } from 'discord.js';
 import { userService } from '../services/user.service';
 import { achievementService } from '../services/achievement.service';
@@ -18,11 +19,69 @@ import { confessionService } from '../services/confession.service';
 import { gamesService } from '../services/games.service';
 import { guildService } from '../services/guild.service';
 import { createEmbed, createSuccessEmbed, createErrorEmbed, createWarningEmbed, createInfoEmbed } from '../utils/embed';
-import { DEFAULT_COLORS, EMOJIS, RARITY, RarityType, formatCurrency, formatHours } from '@priv/shared';
+import { DEFAULT_COLORS, EMOJIS, RARITY, RarityType, formatCurrency, formatHours, calculateShipPercentage } from '@priv/shared';
+import { createShipImage } from '../utils/canvas';
+import { getShipComment, generateShipName } from '../commands/games/ship';
 
 export async function handleButtonInteraction(interaction: ButtonInteraction) {
   const { customId, user, guild } = interaction;
   if (!guild) return;
+
+  // 0. SHIP BUTONLARI
+  if (customId.startsWith('ship_retry_') || customId.startsWith('ship_swap_')) {
+    await interaction.deferReply();
+    const parts = customId.split('_');
+    // format: ship_retry_<id1>_<id2>  or  ship_swap_<id1>_<id2>
+    const id1 = parts[2];
+    const id2 = parts[3];
+
+    const u1 = await interaction.client.users.fetch(id1).catch(() => null);
+    const u2 = await interaction.client.users.fetch(id2).catch(() => null);
+
+    if (!u1 || !u2) {
+      await interaction.editReply({ content: '⚠️ Kullanıcılar bulunamadı.' });
+      return;
+    }
+
+    const percent = calculateShipPercentage(u1.id, u2.id);
+    const { comment, emoji, color } = getShipComment(percent);
+    const shipName = generateShipName(u1.username, u2.username);
+
+    const avatar1 = u1.displayAvatarURL({ extension: 'png', size: 256 });
+    const avatar2 = u2.displayAvatarURL({ extension: 'png', size: 256 });
+
+    let imageBuffer: Buffer | null = null;
+    try {
+      imageBuffer = await createShipImage(avatar1, avatar2, percent);
+    } catch { /* non-fatal */ }
+
+    const embed = createEmbed({
+      title: `${emoji}  [ ${u1.username}  &  ${u2.username} ]  —  #${shipName}`,
+      description: `> *${comment}*`,
+      color: color as any,
+      timestamp: false,
+    });
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`ship_retry_${u1.id}_${u2.id}`)
+        .setLabel('🔄 Yeniden Dene')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`ship_swap_${u2.id}_${u1.id}`)
+        .setLabel('🔀 Yer Değiştir')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    if (imageBuffer) {
+      const attachment = new AttachmentBuilder(imageBuffer, { name: 'ship.png' });
+      embed.setImage('attachment://ship.png');
+      await interaction.editReply({ embeds: [embed], files: [attachment], components: [row] });
+    } else {
+      await interaction.editReply({ embeds: [embed], components: [row] });
+    }
+    return;
+  }
 
   // 1. PROFİL BUTONLARI
   if (customId.startsWith('profile_')) {
