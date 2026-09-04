@@ -4,6 +4,7 @@ import { xpService } from '../services/xp.service';
 import { messageCacheService } from '../services/messageCache.service';
 import { guardService } from '../services/guard.service';
 import { wordGameService } from '../services/wordGame.service';
+import { banterService } from '../services/banter.service';
 import { logger } from '../utils/logger';
 
 // Kullanıcının belirttiği fotoğraf & selfie kanalı ID'si
@@ -68,6 +69,11 @@ export async function onMessageCreate(message: Message) {
   if (isWordGame) {
     return;
   }
+
+  // 1.9. Ana Sohbet (1542620110882349162) Şakacı & Laf Sokucu Bot Yanıtları (Nadiren)
+  await banterService.handleMessage(message).catch((err) => {
+    logger.error('[BANTER] Hata:', err);
+  });
 
   // 2. AutoMod Denetimi
   const violated = await autoModService.processMessage(message);
