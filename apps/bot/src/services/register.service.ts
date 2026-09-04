@@ -88,10 +88,14 @@ class RegisterService {
 
   public getSettings(guildId: string): RegisterSettings {
     const existing = this.settings.get(guildId);
-    if (existing) return existing;
+    if (existing) {
+      // Eğer daha önce kaydedilmişse ama enabled tanımsızsa true yap
+      if (existing.enabled === undefined) existing.enabled = true;
+      return existing;
+    }
 
     const def: RegisterSettings = {
-      enabled: false,
+      enabled: true, // Varsayılan olarak aktif!
       registerChannelId: null,
       chatChannelId: '1542620110882349162', // Sunucunun ana sohbeti varsayılan
       unregisteredRoleId: null,
@@ -112,6 +116,82 @@ class RegisterService {
     this.settings.set(guildId, updated);
     this.saveData();
     return updated;
+  }
+
+  /**
+   * Sunucudaki kayıt kanalını ve rollerini otomatik keşfeder (eğer henüz ayarlanmadıysa)
+   */
+  public autoConfigure(guild: Guild): RegisterSettings {
+    const settings = this.getSettings(guild.id);
+    let changed = false;
+
+    // 1. Kayıt kanalı keşfi
+    if (!settings.registerChannelId) {
+      const foundChannel = guild.channels.cache.find(
+        (ch) =>
+          ch.isTextBased() &&
+          ['kayıt', 'kayit', 'register', 'hoş-geldin', 'hosgeldin', 'giris-cikis', 'giriş-çıkış'].some((k) =>
+            ch.name.toLowerCase().includes(k)
+          )
+      ) as TextChannel | null;
+      if (foundChannel) {
+        settings.registerChannelId = foundChannel.id;
+        changed = true;
+        logger.info(`[REGISTER] Kayıt kanalı otomatik eşleştirildi: #${foundChannel.name} (${foundChannel.id})`);
+      }
+    }
+
+    // 2. Rollerin otomatik keşfi
+    if (!settings.unregisteredRoleId) {
+      const r = guild.roles.cache.find((role) =>
+        ['kayıtsız', 'kayitsiz', 'unregistered', 'üye olmayan'].some((k) => role.name.toLowerCase().includes(k))
+      );
+      if (r) {
+        settings.unregisteredRoleId = r.id;
+        changed = true;
+        logger.info(`[REGISTER] Kayıtsız rolü otomatik eşleştirildi: @${r.name} (${r.id})`);
+      }
+    }
+
+    if (!settings.maleRoleId) {
+      const r = guild.roles.cache.find((role) =>
+        ['erkek', 'boy', 'man'].some((k) => role.name.toLowerCase().includes(k))
+      );
+      if (r) {
+        settings.maleRoleId = r.id;
+        changed = true;
+        logger.info(`[REGISTER] Erkek rolü otomatik eşleştirildi: @${r.name} (${r.id})`);
+      }
+    }
+
+    if (!settings.femaleRoleId) {
+      const r = guild.roles.cache.find((role) =>
+        ['kadın', 'kadin', 'kız', 'kiz', 'girl', 'woman'].some((k) => role.name.toLowerCase().includes(k))
+      );
+      if (r) {
+        settings.femaleRoleId = r.id;
+        changed = true;
+        logger.info(`[REGISTER] Kadın/Kız rolü otomatik eşleştirildi: @${r.name} (${r.id})`);
+      }
+    }
+
+    if (!settings.staffRoleId) {
+      const r = guild.roles.cache.find((role) =>
+        ['kayıt yetkilisi', 'kayit yetkilisi', 'register', 'staff', 'yetkili', 'bot com'].some((k) =>
+          role.name.toLowerCase().includes(k)
+        )
+      );
+      if (r) {
+        settings.staffRoleId = r.id;
+        changed = true;
+        logger.info(`[REGISTER] Kayıt yetkili rolü otomatik eşleştirildi: @${r.name} (${r.id})`);
+      }
+    }
+
+    if (changed) {
+      this.updateSettings(guild.id, settings);
+    }
+    return settings;
   }
 
   public isStaff(member: GuildMember): boolean {

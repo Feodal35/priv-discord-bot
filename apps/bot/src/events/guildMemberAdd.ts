@@ -25,8 +25,13 @@ export async function onGuildMemberAdd(member: GuildMember) {
 
   // 2. KAYIT SİSTEMİ VEYA GENEL HOŞ GELDİN KARTI
   try {
-    const registerSettings = registerService.getSettings(guild.id);
+    let registerSettings = registerService.getSettings(guild.id);
     let handledByRegister = false;
+
+    // Kanal ayarlanmamışsa otomatik tespit et
+    if (!registerSettings.registerChannelId) {
+      registerSettings = registerService.autoConfigure(guild);
+    }
 
     if (registerSettings.enabled && registerSettings.registerChannelId) {
       handledByRegister = await registerService.sendWelcomeCard(member);

@@ -12,6 +12,7 @@ import { birthdayService } from '../services/birthday.service';
 import { guildService } from '../services/guild.service';
 import { deployToGuildInstant, clearGlobalCommands } from '../deploy-commands';
 import { clanRoleService } from '../services/clanRole.service';
+import { registerService } from '../services/register.service';
 
 // Botun 7/24 bağlı kalacağı kalıcı ses kanalı
 export const AUTO_JOIN_CHANNEL_ID = '1543030493224632331';
@@ -54,6 +55,13 @@ export async function onReady(client: Client) {
       logChannelId: '1545497145379917954',
       birthdayChannelId: '1542620110882349162',
     }).catch(() => {});
+
+    // Kayıt kanalı ve rollerini otomatik yapılandır
+    try {
+      registerService.autoConfigure(guild);
+    } catch {
+      /* sessiz */
+    }
   }
 
   // 2. Bot yeniden başladığında asılı kalan boş geçici ses odalarını temizle
