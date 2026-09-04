@@ -96,12 +96,38 @@ export async function onGuildMemberAdd(member: GuildMember) {
 
   // 4. DENETİM & GÜVENLİK LOGU
   try {
+    const accountAgeDays = Math.floor((Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24));
+    const isNewAccount = accountAgeDays < 7;
+    const isBot = member.user.bot;
+    const createdUnix = Math.floor(member.user.createdTimestamp / 1000);
+    const nowUnix = Math.floor(Date.now() / 1000);
+
+    const safetyBadge = isBot
+      ? '🤖 Bot Hesabı'
+      : isNewAccount
+      ? `⚠️ **Şüpheli / Yeni Hesap** (${accountAgeDays} gün önce açılmış)`
+      : `✅ **Güvenli Hesap** (${accountAgeDays} gün önce açılmış)`;
+
+    const desc =
+      `**Kullanıcı:** <@${member.id}> (\`${member.user.tag}\`)\n` +
+      `**ID:** \`${member.id}\`\n` +
+      `**Hesap Durumu:** ${safetyBadge}\n` +
+      `**Hesap Açılış:** <t:${createdUnix}:f> (<t:${createdUnix}:R>)\n` +
+      `**Sunucudaki Toplam Üye:** \`${guild.memberCount}\` üye\n` +
+      `**Katılış Zamanı:** <t:${nowUnix}:T> (<t:${nowUnix}:R>)`;
+
     await logService.logEvent(
       guild.id,
       'MEMBER_JOIN',
-      'Yeni Üye Katıldı',
-      `**Kullanıcı:** <@${member.id}> (${member.user.tag})\n**ID:** \`${member.id}\`\n**Hesap Tarihi:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>\n**Sunucu Toplamı:** ${guild.memberCount} üye`,
-      member.client
+      isBot ? 'Bot Sunucuya Eklendi' : 'Yeni Üye Katıldı',
+      desc,
+      member.client,
+      undefined,
+      {
+        thumbnailUrl: member.displayAvatarURL({ size: 128 }),
+        color: isNewAccount ? 0xe67e22 : 0x2ecc71,
+      }
     );
   } catch { /* sessiz devam */ }
 }
+

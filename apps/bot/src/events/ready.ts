@@ -13,6 +13,7 @@ import { guildService } from '../services/guild.service';
 import { deployToGuildInstant, clearGlobalCommands } from '../deploy-commands';
 import { clanRoleService } from '../services/clanRole.service';
 import { registerService } from '../services/register.service';
+import { initVoiceSessionsFromGuilds } from './voiceStateUpdate';
 
 // Botun 7/24 bağlı kalacağı kalıcı ses kanalı
 export const AUTO_JOIN_CHANNEL_ID = '1543030493224632331';
@@ -84,6 +85,9 @@ export async function onReady(client: Client) {
 
   // 5. Sabit ses kanalına otomatik 7/24 bağlan
   await connectToPersistentVoice(client);
+
+  // 5.1. Sesteki mevcut kullanıcıların sürelerini başlat
+  initVoiceSessionsFromGuilds(client);
 
   // 6. Klan / Guild Rolü (1543392872504762498) Sıkı Denetimi:
   //    Klanı olmayan/salanlardan rolü geri alır, klanı olanlara rolü verir!

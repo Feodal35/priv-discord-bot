@@ -41,12 +41,16 @@ export async function onMessageDelete(message: Message | PartialMessage) {
     /* sessiz */
   }
 
+  const avatarUrl = message.author ? message.author.displayAvatarURL({ size: 128 }) : undefined;
+
   await logService.logEvent(
     message.guild.id,
     'MESSAGE_DELETE',
     'Mesaj Silindi',
     desc,
-    message.client
+    message.client,
+    undefined,
+    { thumbnailUrl: avatarUrl, color: 0xe74c3c }
   );
 
   // İşlem bitince cache'den temizle

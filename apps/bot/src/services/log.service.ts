@@ -13,9 +13,18 @@ export type LogCategory =
   | 'VOICE'
   | 'MEMBER_JOIN'
   | 'MEMBER_LEAVE'
+  | 'MEMBER_UPDATE'
+  | 'ROLE_UPDATE'
   | 'ECONOMY'
   | 'CLAN'
   | 'SYSTEM';
+
+export interface LogOptions {
+  fields?: { name: string; value: string; inline?: boolean }[];
+  thumbnailUrl?: string | null;
+  color?: number;
+  author?: { name: string; iconURL?: string };
+}
 
 export class LogService {
   public async logEvent(
@@ -24,7 +33,8 @@ export class LogService {
     title: string,
     description: string,
     client: Client,
-    fields?: { name: string; value: string; inline?: boolean }[]
+    fieldsOrOptions?: { name: string; value: string; inline?: boolean }[] | LogOptions,
+    extraOptions?: LogOptions
   ) {
     try {
       const settings = await guildService.getGuildSettings(guildId);
@@ -34,41 +44,58 @@ export class LogService {
       const channel = (await client.channels.fetch(targetChannelId).catch(() => null)) as TextChannel | null;
       if (!channel) return;
 
-      let color: any = DEFAULT_COLORS.INFO;
+      // Parametre çözümleme
+      let fields: { name: string; value: string; inline?: boolean }[] | undefined;
+      let options: LogOptions = {};
+
+      if (Array.isArray(fieldsOrOptions)) {
+        fields = fieldsOrOptions;
+        if (extraOptions) options = extraOptions;
+      } else if (fieldsOrOptions && typeof fieldsOrOptions === 'object') {
+        options = fieldsOrOptions;
+        fields = options.fields;
+      }
+
+      let color: any = options.color || DEFAULT_COLORS.INFO;
       let icon: string = EMOJIS.INFO;
 
       switch (category) {
         case 'MODERATION':
-          color = DEFAULT_COLORS.DANGER;
+          if (!options.color) color = DEFAULT_COLORS.DANGER;
           icon = EMOJIS.SHIELD;
           break;
         case 'MESSAGE_DELETE':
         case 'MESSAGE_UPDATE':
-          color = DEFAULT_COLORS.WARNING;
+          if (!options.color) color = DEFAULT_COLORS.WARNING;
           icon = '📝';
           break;
         case 'MEMBER_JOIN':
-          color = DEFAULT_COLORS.SUCCESS;
+          if (!options.color) color = DEFAULT_COLORS.SUCCESS;
           icon = '📥';
           break;
         case 'MEMBER_LEAVE':
-          color = DEFAULT_COLORS.SECONDARY;
+          if (!options.color) color = DEFAULT_COLORS.SECONDARY;
           icon = '📤';
           break;
+        case 'MEMBER_UPDATE':
+        case 'ROLE_UPDATE':
+          if (!options.color) color = 0x3498DB;
+          icon = '👤';
+          break;
         case 'VOICE':
-          color = DEFAULT_COLORS.PURPLE;
-          icon = EMOJIS.VOICE;
+          if (!options.color) color = DEFAULT_COLORS.PURPLE;
+          icon = '🎙️';
           break;
         case 'ECONOMY':
-          color = DEFAULT_COLORS.GOLD;
+          if (!options.color) color = DEFAULT_COLORS.GOLD;
           icon = EMOJIS.COIN;
           break;
         case 'CLAN':
-          color = 0x9b59b6;
+          if (!options.color) color = 0x9b59b6;
           icon = '🛡️';
           break;
         case 'SYSTEM':
-          color = DEFAULT_COLORS.PRIMARY;
+          if (!options.color) color = DEFAULT_COLORS.PRIMARY;
           icon = '⚙️';
           break;
       }
@@ -78,9 +105,17 @@ export class LogService {
         description,
         color,
         fields,
-        footer: { text: `Priv Denetim Kaydı • ${category}` },
+        footer: { text: `Vip Metro • Denetim Kaydı [${category}]` },
         timestamp: true,
       });
+
+      if (options.thumbnailUrl) {
+        embed.setThumbnail(options.thumbnailUrl);
+      }
+
+      if (options.author) {
+        embed.setAuthor({ name: options.author.name, iconURL: options.author.iconURL });
+      }
 
       await channel.send({ embeds: [embed] });
     } catch (err) {
@@ -90,3 +125,4 @@ export class LogService {
 }
 
 export const logService = new LogService();
+

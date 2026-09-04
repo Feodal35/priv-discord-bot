@@ -28,12 +28,16 @@ export async function onMessageUpdate(
     `**Yeni Hali:**\n>>> ${displayNew}\n\n` +
     `🔗 [Mesaja Git](${newMessage.url})`;
 
+  const avatarUrl = newMessage.author ? newMessage.author.displayAvatarURL({ size: 128 }) : undefined;
+
   await logService.logEvent(
     newMessage.guild.id,
     'MESSAGE_UPDATE',
     'Mesaj Düzenlendi',
     desc,
-    newMessage.client
+    newMessage.client,
+    undefined,
+    { thumbnailUrl: avatarUrl, color: 0xf39c12 }
   );
 
   // Güncel mesajı önbelleğe kaydet
