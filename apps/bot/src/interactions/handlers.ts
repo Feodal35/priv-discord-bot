@@ -162,6 +162,70 @@ export async function handleButtonInteraction(interaction: ButtonInteraction) {
     return;
   }
 
+  // -1.3. İSİM DEĞİŞTİR BUTONU (Kayıt Sonrası)
+  if (customId.startsWith('reg_change_name_')) {
+    const member = interaction.member as GuildMember;
+    if (!registerService.isStaff(member)) {
+      await interaction.reply({
+        content: '❌ Bu işlemi gerçekleştirmek için **Kayıt Yetkilisi** olmalısınız!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const targetUserId = customId.replace('reg_change_name_', '');
+
+    const modal = new ModalBuilder()
+      .setCustomId(`reg_modal_rename_${targetUserId}`)
+      .setTitle('İsim Değiştir');
+
+    const nameInput = new TextInputBuilder()
+      .setCustomId('new_name')
+      .setLabel('Yeni İsim (Nick)')
+      .setPlaceholder('Örn: Ahmet')
+      .setStyle(TextInputStyle.Short)
+      .setMinLength(2)
+      .setMaxLength(30)
+      .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput));
+    await interaction.showModal(modal);
+    return;
+  }
+
+  // -1.4. KAYITSIZ VER BUTONU (Kayıt Sonrası)
+  if (customId.startsWith('reg_to_unreg_')) {
+    const staffMember = interaction.member as GuildMember;
+    if (!registerService.isStaff(staffMember)) {
+      await interaction.reply({
+        content: '❌ Bu işlemi gerçekleştirmek için **Kayıt Yetkilisi** olmalısınız!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const targetUserId = customId.replace('reg_to_unreg_', '');
+    const targetMember = await guild.members.fetch(targetUserId).catch(() => null);
+    if (!targetMember) {
+      await interaction.reply({
+        content: '❌ Kullanıcı bulunamadı veya sunucudan ayrılmış!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const result = await registerService.unregisterMember({
+      guild,
+      targetMember,
+      staffMember,
+    });
+
+    await interaction.editReply({ content: result.message });
+    return;
+  }
+
   // 0. SHIP BUTONLARI
   if (customId.startsWith('ship_retry_') || customId.startsWith('ship_swap_')) {
     await interaction.deferReply();
@@ -570,6 +634,51 @@ export async function handleButtonInteraction(interaction: ButtonInteraction) {
 export async function handleModalInteraction(interaction: ModalSubmitInteraction) {
   const { customId, user, guild } = interaction;
   if (!guild) return;
+
+  // İSİM DEĞİŞTİRME MODALI (reg_modal_rename_)
+  if (customId.startsWith('reg_modal_rename_')) {
+    const targetUserId = customId.replace('reg_modal_rename_', '');
+    const newName = interaction.fields.getTextInputValue('new_name').trim();
+
+    const staffMember = interaction.member as GuildMember;
+    if (!registerService.isStaff(staffMember)) {
+      await interaction.reply({
+        content: '❌ Bu işlemi gerçekleştirmek için **Kayıt Yetkilisi** olmalısınız!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const targetMember = await guild.members.fetch(targetUserId).catch(() => null);
+    if (!targetMember) {
+      await interaction.reply({
+        content: '❌ Kullanıcı sunucuda bulunamadı!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const settings = registerService.getSettings(guild.id);
+    let finalNick = newName;
+    if (settings.tagEnabled && settings.tag) {
+      finalNick = `${settings.tag} ${newName}`;
+    }
+    if (finalNick.length > 32) finalNick = finalNick.substring(0, 32);
+
+    try {
+      await targetMember.setNickname(finalNick);
+      await interaction.reply({
+        content: `✅ <@${targetUserId}> kullanıcısının ismi başarıyla \`${finalNick}\` olarak güncellendi!`,
+        ephemeral: true,
+      });
+    } catch (e) {
+      await interaction.reply({
+        content: `⚠️ İsim değiştirilirken bir yetki hatası oluştu. (Botun rolü üyenin rolünden yukarıda olmalıdır).`,
+        ephemeral: true,
+      });
+    }
+    return;
+  }
 
   // KAYIT MODALI (Erkek / Kız veya Yeniden Kaydet)
   if (customId.startsWith('reg_modal_')) {

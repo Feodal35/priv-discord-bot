@@ -318,6 +318,57 @@ class RegisterService {
       }
     }
 
+    // 4.1. "Kayıt Yapıldı!" Embed'i ve Butonları (İsim Değiştir, Kayıtsız Ver)
+    try {
+      let targetChannel: TextChannel | null = null;
+      if (originalMessage && originalMessage.channel && originalMessage.channel.isTextBased()) {
+        targetChannel = originalMessage.channel as TextChannel;
+      } else if (settings.registerChannelId) {
+        targetChannel = (await guild.channels.fetch(settings.registerChannelId).catch(() => null)) as TextChannel | null;
+      }
+
+      if (targetChannel && targetChannel.isTextBased()) {
+        const staffStats = this.getStaffStats(guild.id, staffMember.id);
+        const staffGenderCount = gender === 'MALE' ? staffStats.male : staffStats.female;
+        const genderTitle = gender === 'MALE' ? 'Erkek' : 'Kız';
+        const roleMention =
+          gender === 'MALE'
+            ? (settings.maleRoleId ? `<@&${settings.maleRoleId}>` : 'Erkek')
+            : (settings.femaleRoleId ? `<@&${settings.femaleRoleId}>` : 'Kadın');
+
+        const successEmbed = createEmbed({
+          title: 'Kayıt Yapıldı!',
+          description:
+            `**Kayıt Edilen:** <@${targetMember.id}>\n` +
+            `**Kayıt Eden:** <@${staffMember.id}>\n` +
+            `**Verilen Roller:** ${roleMention}\n` +
+            `**Yeni İsim:** \`${finalNick}\`\n` +
+            `**Kayıt Türü:** \`${genderTitle}\``,
+          color: DEFAULT_COLORS.SUCCESS,
+          thumbnail: targetMember.displayAvatarURL({ extension: 'png', size: 256 }),
+          footer: {
+            text: `${staffMember.user.username} • ${genderTitle} kayıt sayın: ${staffGenderCount}`,
+          },
+          timestamp: false,
+        });
+
+        const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`reg_change_name_${targetMember.id}`)
+            .setLabel('İsim Değiştir')
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId(`reg_to_unreg_${targetMember.id}`)
+            .setLabel('Kayıtsız Ver')
+            .setStyle(ButtonStyle.Danger)
+        );
+
+        await targetChannel.send({ embeds: [successEmbed], components: [actionRow] }).catch(() => {});
+      }
+    } catch (sendErr) {
+      logger.error('[REGISTER] Kayıt yapıldı onay mesajı gönderilemedi:', sendErr);
+    }
+
     // 5. Sohbet kanalına hoş geldin tebrik mesajı
     if (settings.chatChannelId) {
       try {
