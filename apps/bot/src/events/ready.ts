@@ -45,9 +45,13 @@ export async function onReady(client: Client) {
     ],
   });
 
-  // 1. Sunucu kayıtlarını veritabanı ile eşitle
+  // 1. Sunucu kayıtlarını veritabanı ile eşitle ve itiraf kanalını (1545496276576116878) bağla
   for (const [guildId, guild] of client.guilds.cache) {
     await guildService.getOrCreateGuild(guildId, guild.name, guild.ownerId, guild.iconURL());
+    await guildService.updateGuildSettings(guildId, {
+      confessionChannelId: '1545496276576116878',
+      confessionEnabled: true,
+    }).catch(() => {});
   }
 
   // 2. Bot yeniden başladığında asılı kalan boş geçici ses odalarını temizle
