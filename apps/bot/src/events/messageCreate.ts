@@ -9,6 +9,8 @@ import { logger } from '../utils/logger';
 
 // Kullanıcının belirttiği fotoğraf & selfie kanalı ID'si
 export const PHOTO_CHANNEL_ID = '1543271245779566703';
+// Kullanıcının belirttiği itiraf kanalı ID'si
+export const CONFESSION_CHANNEL_ID = '1545496276576116878';
 
 export async function onMessageCreate(message: Message) {
   if (!message.guild || message.author.bot) return;
@@ -54,6 +56,27 @@ export async function onMessageCreate(message: Message) {
         }
         return; // İşlemi burada sonlandır
       }
+    }
+  }
+
+  // 1.2. İtiraf Kanalı Kuralı (1545496276576116878) - Düz metin / sohbet yasak!
+  if (message.channelId === CONFESSION_CHANNEL_ID) {
+    const isAdmin = message.member?.permissions.has(PermissionFlagsBits.Administrator);
+    if (!isAdmin) {
+      try {
+        await message.delete().catch(() => {});
+        const textChannel = message.channel as TextChannel;
+        const warnMsg = await textChannel.send({
+          content: `🤫 <@${message.author.id}>, bu kanal **İtiraf Kanalı**dır! Normal mesaj yazmak yasaktır. İtiraf göndermek için lütfen **\`/itiraf\`** komutunu kullanın.`,
+        }).catch(() => null);
+
+        if (warnMsg) {
+          setTimeout(() => warnMsg.delete().catch(() => {}), 4000);
+        }
+      } catch (err) {
+        logger.error('[CONFESSION] Normal metin mesajı silinemedi:', err);
+      }
+      return; // İşlemi burada sonlandır
     }
   }
 
