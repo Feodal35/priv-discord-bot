@@ -17,6 +17,7 @@ import { initVoiceSessionsFromGuilds } from './voiceStateUpdate';
 import { giveawayService } from '../services/giveaway.service';
 import { wordGameService } from '../services/wordGame.service';
 import { boosterColorService } from '../services/boosterColor.service';
+import { marriageService } from '../services/marriage.service';
 
 // Botun 7/24 bağlı kalacağı kalıcı ses kanalı
 export const AUTO_JOIN_CHANNEL_ID = '1543030493224632331';
@@ -112,6 +113,19 @@ export async function onReady(client: Client) {
   boosterColorService.autoDeployPanel(client).catch((err) => {
     logger.error('Booster renk paneli deploy hatası:', err);
   });
+
+  // 4.4. Evlilik sistemini ve market yüzüklerini hazırla
+  marriageService
+    .initTable()
+    .then(async () => {
+      for (const [guildId] of client.guilds.cache) {
+        await marriageService.ensureRingsInShop(guildId).catch(() => {});
+      }
+      logger.info('💍 Evlilik sistemi ve market yüzükleri başarıyla hazırlandı.');
+    })
+    .catch((err) => {
+      logger.error('Evlilik servisi başlatma hatası:', err);
+    });
 
   // 5. Sabit ses kanalına otomatik 7/24 bağlan
   await connectToPersistentVoice(client);

@@ -11,6 +11,7 @@ import {
 } from 'discord.js';
 import { guildService } from './guild.service';
 import { userService } from './user.service';
+import { marriageService } from './marriage.service';
 import { xpService } from './xp.service';
 import { questService } from './quest.service';
 import { createEmbed } from '../utils/embed';
@@ -77,17 +78,36 @@ export class VoiceService {
 
           try {
             await userService.ensureUserAndGuild(userId, guildId);
+
+            // Evli Çiftler Aynı Ses Odasındaysa +%50 XP Boost & Aşk Puanı
+            let xpMultiplier = 1;
+            try {
+              const marriage = await marriageService.getMarriage(guildId, userId);
+              if (marriage) {
+                const partnerId = marriage.user1Id === userId ? marriage.user2Id : marriage.user1Id;
+                const partnerSession = this.activeSessions.get(`${guildId}:${partnerId}`);
+                if (partnerSession && partnerSession.channelId === session.channelId) {
+                  xpMultiplier = 1.5;
+                  await marriageService.addLovePoints(marriage.id, minutes);
+                }
+              }
+            } catch {
+              /* sessiz */
+            }
+
+            const earnedXp = Math.floor(minutes * 5 * xpMultiplier);
+
             await prisma.userGuild.upsert({
               where: { userId_guildId: { userId, guildId } },
               update: {
                 voiceSeconds: { increment: flushSeconds },
-                xp: { increment: minutes * 5 },
+                xp: { increment: earnedXp },
               },
               create: {
                 userId,
                 guildId,
                 voiceSeconds: flushSeconds,
-                xp: minutes * 5,
+                xp: earnedXp,
               },
             });
 

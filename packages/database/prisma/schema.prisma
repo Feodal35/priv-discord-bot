@@ -27,6 +27,8 @@ model User {
   pollVotes     PollVote[]
   moderationLogsTarget ModerationLog[] @relation("TargetUser")
   moderationLogsMod    ModerationLog[] @relation("ModeratorUser")
+  marriagesAsUser1     Marriage[]      @relation("MarriageUser1")
+  marriagesAsUser2     Marriage[]      @relation("MarriageUser2")
 
   @@map("users")
 }
@@ -59,6 +61,7 @@ model Guild {
   moderationLogs   ModerationLog[]
   autoModRule      AutoModRule?
   wordGame         WordGame?
+  marriages        Marriage[]
 
   @@map("guilds")
 }
@@ -448,3 +451,24 @@ model WordGame {
 
   @@map("word_games")
 }
+
+model Marriage {
+  id         String   @id @default(cuid())
+  guildId    String
+  user1Id    String
+  user2Id    String
+  ringType   String   @default("SILVER") // SILVER, GOLD, DIAMOND
+  lovePoints Int      @default(10)
+  jointCoins Int      @default(0)
+  marriedAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  guild      Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user1      User     @relation("MarriageUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2      User     @relation("MarriageUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, user1Id])
+  @@unique([guildId, user2Id])
+  @@map("marriages")
+}
+

@@ -12,6 +12,9 @@ import { yilozetiCommand } from './commands/social/yilozeti';
 import { verilerimCommand } from './commands/social/verilerim';
 import { verilerimiSilCommand } from './commands/social/verilerimi-sil';
 import { zenginCommand } from './commands/social/zengin';
+import { evlenCommand } from './commands/social/evlen';
+import { evlilikCommand } from './commands/social/evlilik';
+import { bosanCommand } from './commands/social/bosan';
 
 // Ekonomi Komutları
 import { bakiyeCommand } from './commands/economy/bakiye';
@@ -28,6 +31,8 @@ import { shipCommand } from './commands/games/ship';
 import { blackjackCommand } from './commands/games/blackjack';
 import { ruletCommand } from './commands/games/rulet';
 import { kelimeOyunCommand } from './commands/games/kelimeOyun';
+import { balikTutCommand } from './commands/games/balikTut';
+import { slotCommand } from './commands/games/slot';
 
 // Araç Komutları
 import { yardimCommand } from './commands/utility/yardim';
@@ -97,6 +102,9 @@ const allCommands: SlashCommand[] = [
   verilerimCommand,
   verilerimiSilCommand,
   zenginCommand,
+  evlenCommand,
+  evlilikCommand,
+  bosanCommand,
   bakiyeCommand,
   gunlukCommand,
   calisCommand,
@@ -109,6 +117,8 @@ const allCommands: SlashCommand[] = [
   blackjackCommand,
   ruletCommand,
   kelimeOyunCommand,
+  balikTutCommand,
+  slotCommand,
   yardimCommand,
   sunucuCommand,
   siralamaCommand,
