@@ -69,6 +69,99 @@ export async function handleButtonInteraction(interaction: ButtonInteraction) {
     return;
   }
 
+  // -1.1. KAYIT BİLGİSİ BUTONU (📋 Kayıt Bilgisi)
+  if (customId.startsWith('reg_info_')) {
+    const member = interaction.member as GuildMember;
+    if (!registerService.isStaff(member)) {
+      await interaction.reply({
+        content: '❌ Bu bilgiyi görüntülemek için **Kayıt Yetkilisi** olmalısınız!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const targetUserId = customId.replace('reg_info_', '');
+    const history = registerService.getHistory(guild.id, targetUserId);
+
+    if (history.length === 0) {
+      await interaction.reply({
+        embeds: [
+          createEmbed({
+            title: '📋 Kayıt Bilgisi',
+            description: `<@${targetUserId}> kullanıcısına ait henüz kaydedilmiş bir kayıt verisi bulunmuyor.`,
+            color: DEFAULT_COLORS.PRIMARY,
+          }),
+        ],
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const last = history[0];
+    const genderText = last.gender === 'MALE' ? '♂️ Erkek' : '♀️ Kız';
+    const timeUnix = Math.floor(new Date(last.registeredAt).getTime() / 1000);
+
+    const embed = createEmbed({
+      title: '📋 Kullanıcı Kayıt Bilgisi',
+      description:
+        `**Kullanıcı:** <@${targetUserId}>\n\n` +
+        `• **Kayıt Eden Yetkili:** <@${last.staffId}>\n` +
+        `• **Kayıt Edilen İsim:** \`${last.name}\`\n` +
+        `• **Cinsiyet:** ${genderText}\n` +
+        `• **Kayıt Tarihi:** <t:${timeUnix}:f> (<t:${timeUnix}:R>)\n` +
+        `• **Toplam Kayıt Sayısı:** \`${history.length}\` kez kayıt edilmiş.`,
+      color: DEFAULT_COLORS.PRIMARY,
+    });
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+    return;
+  }
+
+  // -1.2. YENİDEN KAYDET BUTONU (🔄 Yeniden Kaydet)
+  if (customId.startsWith('reg_redo_')) {
+    const member = interaction.member as GuildMember;
+    if (!registerService.isStaff(member)) {
+      await interaction.reply({
+        content: '❌ Bu işlemi gerçekleştirmek için **Kayıt Yetkilisi** olmalısınız!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const targetUserId = customId.replace('reg_redo_', '');
+
+    // Modal aç (İsim ve Cinsiyet)
+    const modal = new ModalBuilder()
+      .setCustomId(`reg_modal_redo_${targetUserId}`)
+      .setTitle('🔄 Yeniden Kaydet');
+
+    const nameInput = new TextInputBuilder()
+      .setCustomId('register_name')
+      .setLabel('Kullanıcı İsmi (Nick)')
+      .setPlaceholder('Örn: Ahmet')
+      .setStyle(TextInputStyle.Short)
+      .setMinLength(2)
+      .setMaxLength(30)
+      .setRequired(true);
+
+    const genderInput = new TextInputBuilder()
+      .setCustomId('register_gender')
+      .setLabel('Cinsiyet (Erkek için: E, Kız için: K)')
+      .setPlaceholder('E veya K yazınız')
+      .setStyle(TextInputStyle.Short)
+      .setMinLength(1)
+      .setMaxLength(10)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(genderInput)
+    );
+
+    await interaction.showModal(modal);
+    return;
+  }
+
   // 0. SHIP BUTONLARI
   if (customId.startsWith('ship_retry_') || customId.startsWith('ship_swap_')) {
     await interaction.deferReply();
@@ -478,10 +571,10 @@ export async function handleModalInteraction(interaction: ModalSubmitInteraction
   const { customId, user, guild } = interaction;
   if (!guild) return;
 
-  // KAYIT MODALI (Erkek / Kız)
+  // KAYIT MODALI (Erkek / Kız veya Yeniden Kaydet)
   if (customId.startsWith('reg_modal_')) {
-    const parts = customId.split('_'); // reg, modal, male/female, targetUserId
-    const genderKey = parts[2];
+    const parts = customId.split('_'); // reg, modal, male/female/redo, targetUserId
+    const modeKey = parts[2];
     const targetUserId = parts[3];
     const name = interaction.fields.getTextInputValue('register_name');
 
@@ -503,6 +596,22 @@ export async function handleModalInteraction(interaction: ModalSubmitInteraction
       return;
     }
 
+    let gender: 'MALE' | 'FEMALE' = 'MALE';
+    if (modeKey === 'female') {
+      gender = 'FEMALE';
+    } else if (modeKey === 'redo') {
+      try {
+        const rawGender = interaction.fields.getTextInputValue('register_gender').toLowerCase().trim();
+        if (rawGender.startsWith('k') || rawGender.startsWith('f')) {
+          gender = 'FEMALE';
+        } else {
+          gender = 'MALE';
+        }
+      } catch {
+        gender = 'MALE';
+      }
+    }
+
     await interaction.deferReply({ ephemeral: true });
 
     const result = await registerService.registerMember({
@@ -510,7 +619,7 @@ export async function handleModalInteraction(interaction: ModalSubmitInteraction
       targetMember,
       staffMember,
       name,
-      gender: genderKey === 'male' ? 'MALE' : 'FEMALE',
+      gender,
       originalMessage: interaction.message,
     });
 

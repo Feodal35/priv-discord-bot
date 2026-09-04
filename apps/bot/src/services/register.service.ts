@@ -128,34 +128,20 @@ class RegisterService {
   }
 
   /**
-   * Yeni üye katıldığında kayıt kanalına Nors tarzı karşılama kartını gönderir
+   * Karşılama ve kayıt mesajı payload'unu oluşturur
+   * isRegistered = false -> 2 buton (Erkek Kayıt, Kız Kayıt)
+   * isRegistered = true  -> 4 buton (Erkek Kayıt, Kız Kayıt, Kayıt Bilgisi, Yeniden Kaydet)
    */
-  public async sendWelcomeCard(member: GuildMember): Promise<boolean> {
-    const guild = member.guild;
+  public buildWelcomeCardPayload(params: {
+    guild: Guild;
+    member: GuildMember;
+    isRegistered?: boolean;
+  }) {
+    const { guild, member, isRegistered } = params;
     const settings = this.getSettings(guild.id);
-
-    if (!settings.enabled || !settings.registerChannelId) {
-      return false;
-    }
-
-    const channel = (await guild.channels.fetch(settings.registerChannelId).catch(() => null)) as TextChannel | null;
-    if (!channel || !channel.isTextBased()) {
-      return false;
-    }
-
-    // Kayıtsız rolünü otomatik ver (ayarlıysa)
-    if (settings.unregisteredRoleId) {
-      try {
-        await member.roles.add(settings.unregisteredRoleId).catch(() => {});
-      } catch {
-        /* sessiz devam */
-      }
-    }
-
-    // Güvenilirlik kontrolü (hesap 7 günden yeni mi?)
     const accountAgeDays = (Date.now() - member.user.createdTimestamp) / (1000 * 60 * 60 * 24);
     const isSuspicious = accountAgeDays < 7;
-    const trustStatus = isSuspicious ? '⚠️ Şüpheli (Hesap Yeni)' : '✅ Güvenilir';
+    const trustStatus = isSuspicious ? 'Şüpheli (Hesap Yeni)' : 'Güvenilir';
 
     const staffMention = settings.staffRoleId ? `<@&${settings.staffRoleId}>` : 'Yetkili';
 
@@ -183,12 +169,60 @@ class RegisterService {
         .setStyle(ButtonStyle.Danger)
     );
 
+    // Kayıt olmuş birinin mesajına ek 2 buton eklenir (Kayıt Bilgisi & Yeniden Kaydet)
+    if (isRegistered) {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`reg_info_${member.id}`)
+          .setLabel('📋 Kayıt Bilgisi')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`reg_redo_${member.id}`)
+          .setLabel('🔄 Yeniden Kaydet')
+          .setStyle(ButtonStyle.Success)
+      );
+    }
+
+    return {
+      content: `<@${member.id}> ${settings.staffRoleId ? `<@&${settings.staffRoleId}>` : ''}`,
+      embeds: [embed],
+      components: [row],
+    };
+  }
+
+  /**
+   * Yeni üye katıldığında kayıt kanalına Nors tarzı karşılama kartını gönderir
+   */
+  public async sendWelcomeCard(member: GuildMember): Promise<boolean> {
+    const guild = member.guild;
+    const settings = this.getSettings(guild.id);
+
+    if (!settings.enabled || !settings.registerChannelId) {
+      return false;
+    }
+
+    const channel = (await guild.channels.fetch(settings.registerChannelId).catch(() => null)) as TextChannel | null;
+    if (!channel || !channel.isTextBased()) {
+      return false;
+    }
+
+    // Kayıtsız rolünü otomatik ver (ayarlıysa)
+    if (settings.unregisteredRoleId) {
+      try {
+        await member.roles.add(settings.unregisteredRoleId).catch(() => {});
+      } catch {
+        /* sessiz devam */
+      }
+    }
+
+    const payload = this.buildWelcomeCardPayload({
+      guild,
+      member,
+      isRegistered: false,
+    });
+
     try {
-      await channel.send({
-        content: `<@${member.id}> ${settings.staffRoleId ? `<@&${settings.staffRoleId}>` : ''}`,
-        embeds: [embed],
-        components: [row],
-      });
+      await channel.send(payload);
       return true;
     } catch (err) {
       logger.error('[REGISTER] Karşılama mesajı gönderilemedi:', err);
@@ -269,27 +303,16 @@ class RegisterService {
     this.records.push(record);
     this.saveData();
 
-    // 4. Orijinal karşılama mesajı varsa butonları devre dışı bırakıp başarı embed'i yap
+    // 4. Orijinal karşılama mesajı varsa 4 butonlu yapıya dönüştür (Erkek, Kız, Kayıt Bilgisi, Yeniden Kaydet)
     if (originalMessage && originalMessage.editable) {
       try {
-        const genderText = gender === 'MALE' ? '♂️ Erkek' : '♀️ Kız';
-        const updatedEmbed = createEmbed({
-          title: `✅ Kayıt Başarıyla Tamamlandı!`,
-          description:
-            `**Kayıt Edilen:** <@${targetMember.id}> (\`${finalNick}\`)\n` +
-            `**Kayıt Eden Yetkili:** <@${staffMember.id}>\n` +
-            `**Cinsiyet:** ${genderText}\n` +
-            `**Kayıt Tarihi:** <t:${Math.floor(Date.now() / 1000)}:R>`,
-          color: DEFAULT_COLORS.SUCCESS,
-          thumbnail: targetMember.displayAvatarURL({ extension: 'png', size: 256 }),
-          timestamp: false,
+        const payload = this.buildWelcomeCardPayload({
+          guild,
+          member: targetMember,
+          isRegistered: true,
         });
 
-        await originalMessage.edit({
-          content: `<@${targetMember.id}>`,
-          embeds: [updatedEmbed],
-          components: [], // Butonlar kaldırıldı
-        });
+        await originalMessage.edit(payload);
       } catch (editErr) {
         logger.error('[REGISTER] Karşılama mesajı düzenlenemedi:', editErr);
       }
