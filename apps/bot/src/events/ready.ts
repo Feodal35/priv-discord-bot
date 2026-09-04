@@ -15,6 +15,7 @@ import { clanRoleService } from '../services/clanRole.service';
 import { registerService } from '../services/register.service';
 import { initVoiceSessionsFromGuilds } from './voiceStateUpdate';
 import { giveawayService } from '../services/giveaway.service';
+import { wordGameService } from '../services/wordGame.service';
 
 // Botun 7/24 bağlı kalacağı kalıcı ses kanalı
 export const AUTO_JOIN_CHANNEL_ID = '1543030493224632331';
@@ -86,6 +87,25 @@ export async function onReady(client: Client) {
 
   // 4.1. Çekiliş takip servisini başlat
   giveawayService.startWorker(client);
+
+  // 4.2. Kelime oyunu verilerini PostgreSQL'den yükle ve kanalı otomatik bağla
+  try {
+    await wordGameService.loadFromDatabase();
+    for (const [guildId, guild] of client.guilds.cache) {
+      const existing = wordGameService.getState(guildId);
+      if (!existing) {
+        const kelimeChannel = guild.channels.cache.find(
+          (c) => c.isTextBased() && (c.name.includes('kelime-türetmece') || c.name.includes('kelime-oyun') || c.name.includes('kelime'))
+        );
+        if (kelimeChannel) {
+          wordGameService.setChannel(guildId, kelimeChannel.id);
+          logger.info(`[WORD_GAME] "${guild.name}" sunucusunda "${kelimeChannel.name}" kanalı kelime oyunu olarak otomatik bağlandı.`);
+        }
+      }
+    }
+  } catch (err) {
+    logger.error('[WORD_GAME] Kelime oyunu başlangıç yükleme hatası:', err);
+  }
 
   // 5. Sabit ses kanalına otomatik 7/24 bağlan
   await connectToPersistentVoice(client);

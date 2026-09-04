@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Message, TextChannel } from 'discord.js';
+import { prisma } from '@priv/database';
 import { economyService } from './economy.service';
 import { createEmbed } from '../utils/embed';
 import { DEFAULT_COLORS } from '@priv/shared';
@@ -16,9 +17,6 @@ export interface WordGameState {
   streak: number;
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DATA_FILE = path.join(DATA_DIR, 'wordgame.json');
-
 export class WordGameService {
   private games = new Map<string, WordGameState>(); // guildId -> state
   private dictionary = new Set<string>();
@@ -26,7 +24,7 @@ export class WordGameService {
 
   constructor() {
     this.loadDictionary();
-    this.loadState();
+    this.loadFromDatabase().catch(() => {});
   }
 
   private loadDictionary() {
@@ -67,28 +65,68 @@ export class WordGameService {
     }
   }
 
-  private loadState() {
+  /**
+   * PostgreSQL veritabanından kelime oyunu kanallarını ve durumlarını yükler.
+   * Bot yeniden başlasa bile asla silinmez!
+   */
+  public async loadFromDatabase() {
     try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      if (fs.existsSync(DATA_FILE)) {
-        const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-        const list: WordGameState[] = JSON.parse(raw);
-        for (const g of list) {
-          this.games.set(g.guildId, g);
+      const records = await prisma.wordGame.findMany();
+      for (const rec of records) {
+        let used: string[] = [];
+        try {
+          used = JSON.parse(rec.usedWords);
+        } catch {
+          used = [rec.lastWord];
         }
+        this.games.set(rec.guildId, {
+          guildId: rec.guildId,
+          channelId: rec.channelId,
+          lastWord: rec.lastWord,
+          lastLetter: rec.lastLetter,
+          lastUserId: rec.lastUserId,
+          usedWords: used,
+          streak: rec.streak,
+        });
       }
+      logger.info(`[WORD_GAME] PostgreSQL'den ${records.length} sunucu için kelime oyunu yüklendi.`);
     } catch (e) {
-      logger.error('[WORD_GAME] Durum yükleme hatası:', e);
+      logger.error('[WORD_GAME] PostgreSQL yükleme hatası:', e);
     }
   }
 
-  private saveState() {
+  /**
+   * Durumu hem hafızaya hem kalıcı PostgreSQL veritabanına kaydeder
+   */
+  private async persistState(state: WordGameState) {
     try {
-      if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-      const list = Array.from(this.games.values());
-      fs.writeFileSync(DATA_FILE, JSON.stringify(list, null, 2), 'utf-8');
+      await prisma.wordGame.upsert({
+        where: { guildId: state.guildId },
+        update: {
+          channelId: state.channelId,
+          lastWord: state.lastWord,
+          lastLetter: state.lastLetter,
+          lastUserId: state.lastUserId,
+          usedWords: JSON.stringify(state.usedWords),
+          streak: state.streak,
+        },
+        create: {
+          guildId: state.guildId,
+          channelId: state.channelId,
+          lastWord: state.lastWord,
+          lastLetter: state.lastLetter,
+          lastUserId: state.lastUserId,
+          usedWords: JSON.stringify(state.usedWords),
+          streak: state.streak,
+        },
+      });
+
+      await prisma.guildSettings.update({
+        where: { guildId: state.guildId },
+        data: { wordGameChannelId: state.channelId },
+      }).catch(() => {});
     } catch (e) {
-      logger.error('[WORD_GAME] Durum kaydetme hatası:', e);
+      logger.error('[WORD_GAME] PostgreSQL kaydetme hatası:', e);
     }
   }
 
@@ -108,7 +146,7 @@ export class WordGameService {
       state.channelId = channelId;
     }
     this.games.set(guildId, state);
-    this.saveState();
+    this.persistState(state);
     return state;
   }
 
@@ -126,7 +164,7 @@ export class WordGameService {
     state.streak = 0;
 
     this.games.set(guildId, state);
-    this.saveState();
+    this.persistState(state);
     return state;
   }
 
@@ -311,7 +349,7 @@ export class WordGameService {
     state.lastUserId = message.author.id;
     state.streak++;
     state.lastLetter = this.calculateNextLetter(word);
-    this.saveState();
+    this.persistState(state);
 
     // 1. Olan kelimelere tik koy (✅)
     await message.react('✅').catch((err) => {

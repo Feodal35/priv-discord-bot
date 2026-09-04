@@ -58,6 +58,7 @@ model Guild {
   memories         Memory[]
   moderationLogs   ModerationLog[]
   autoModRule      AutoModRule?
+  wordGame         WordGame?
 
   @@map("guilds")
 }
@@ -82,6 +83,7 @@ model GuildSettings {
   birthdayChannelId        String?
   tempVoiceCategoryId      String?
   tempVoiceCreateChannelId String?
+  wordGameChannelId        String?
 
   // Roller
   autoRoleId               String?
@@ -429,4 +431,20 @@ model AutoModRule {
   guild                  Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   @@map("automod_rules")
+}
+
+model WordGame {
+  id         String   @id @default(cuid())
+  guildId    String   @unique
+  channelId  String
+  lastWord   String   @default("elma")
+  lastLetter String   @default("a")
+  lastUserId String   @default("")
+  usedWords  String   @default("[\"elma\"]") // JSON array of strings
+  streak     Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  guild      Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("word_games")
 }
