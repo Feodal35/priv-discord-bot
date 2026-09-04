@@ -38,9 +38,9 @@ export async function onReady(client: Client) {
     status: 'online',
     activities: [
       {
-        name: 'Priv Topluluğu | /yardım',
+        name: 'Vip Metro | /yardım',
         type: ActivityType.Custom,
-        state: '👑 Priv • Gelişmiş Ekonomi, Oyun ve Topluluk Botu',
+        state: 'Vip Metro Sizi çağırıyor',
       },
     ],
   });
