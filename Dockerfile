@@ -19,17 +19,10 @@ COPY apps/ ./apps/
 RUN npm run db:generate
 RUN npm run build
 
-FROM base AS bot
+FROM base AS runner
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages ./packages
-COPY --from=build /app/apps/bot ./apps/bot
-COPY --from=build /app/package.json ./
-CMD ["npm", "run", "start:bot"]
-
-FROM base AS api
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/packages ./packages
-COPY --from=build /app/apps/api ./apps/api
+COPY --from=build /app/apps ./apps
 COPY --from=build /app/package.json ./
 EXPOSE 4000
-CMD ["npm", "run", "start:api"]
+CMD ["sh", "-c", "npm run start:api & npm run start:bot"]
