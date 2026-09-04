@@ -8,6 +8,7 @@
     "apps/*"
   ],
   "scripts": {
+    "start": "node scripts/start.js",
     "build": "npm run build --workspaces --if-present",
     "start:bot": "npm run start -w apps/bot",
     "dev:bot": "npm run dev -w apps/bot",
@@ -19,6 +20,9 @@
     "db:seed": "npm run seed -w packages/database",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
+  },
+  "dependencies": {
+    "typescript": "^5.5.4"
   },
   "keywords": [
     "discord-bot",

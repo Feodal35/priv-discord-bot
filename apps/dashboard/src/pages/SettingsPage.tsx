@@ -93,7 +93,7 @@ export const SettingsPage: React.FC = () => {
             <input
               type="text"
               value={settings.botName || ''}
-              onChange={(e) => setSettings({ ...settings, botName: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, botName: e.target.value })}
               className="w-full bg-priv-hover border border-priv-border rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-priv-accent transition"
             />
           </div>
@@ -106,13 +106,13 @@ export const SettingsPage: React.FC = () => {
               <input
                 type="color"
                 value={settings.embedColor || '#5865F2'}
-                onChange={(e) => setSettings({ ...settings, embedColor: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, embedColor: e.target.value })}
                 className="w-10 h-10 rounded-lg cursor-pointer bg-transparent border-0"
               />
               <input
                 type="text"
                 value={settings.embedColor || '#5865F2'}
-                onChange={(e) => setSettings({ ...settings, embedColor: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, embedColor: e.target.value })}
                 className="flex-1 bg-priv-hover border border-priv-border rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-priv-accent transition font-mono"
               />
             </div>
@@ -132,7 +132,7 @@ export const SettingsPage: React.FC = () => {
               type="text"
               value={settings.welcomeChannelId || ''}
               placeholder="Örn: 123456789012345678"
-              onChange={(e) => setSettings({ ...settings, welcomeChannelId: e.target.value || null })}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, welcomeChannelId: e.target.value || null })}
               className="w-full bg-priv-hover border border-priv-border rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-priv-accent transition font-mono"
             />
           </div>
@@ -145,7 +145,7 @@ export const SettingsPage: React.FC = () => {
               type="text"
               value={settings.logChannelId || ''}
               placeholder="Örn: 123456789012345678"
-              onChange={(e) => setSettings({ ...settings, logChannelId: e.target.value || null })}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, logChannelId: e.target.value || null })}
               className="w-full bg-priv-hover border border-priv-border rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-priv-accent transition font-mono"
             />
           </div>
@@ -158,7 +158,7 @@ export const SettingsPage: React.FC = () => {
               type="text"
               value={settings.confessionChannelId || ''}
               placeholder="Örn: 123456789012345678"
-              onChange={(e) => setSettings({ ...settings, confessionChannelId: e.target.value || null })}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, confessionChannelId: e.target.value || null })}
               className="w-full bg-priv-hover border border-priv-border rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-priv-accent transition font-mono"
             />
           </div>
@@ -171,7 +171,7 @@ export const SettingsPage: React.FC = () => {
               type="text"
               value={settings.birthdayChannelId || ''}
               placeholder="Örn: 123456789012345678"
-              onChange={(e) => setSettings({ ...settings, birthdayChannelId: e.target.value || null })}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, birthdayChannelId: e.target.value || null })}
               className="w-full bg-priv-hover border border-priv-border rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-priv-accent transition font-mono"
             />
           </div>
@@ -194,7 +194,7 @@ export const SettingsPage: React.FC = () => {
           <textarea
             rows={3}
             value={settings.welcomeMessage || ''}
-            onChange={(e) => setSettings({ ...settings, welcomeMessage: e.target.value })}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSettings({ ...settings, welcomeMessage: e.target.value })}
             className="w-full bg-priv-hover border border-priv-border rounded-xl p-3 text-white text-sm focus:outline-none focus:border-priv-accent transition"
           />
         </div>
@@ -219,7 +219,7 @@ export const SettingsPage: React.FC = () => {
               <input
                 type="checkbox"
                 checked={!!settings[item.key]}
-                onChange={(e) => setSettings({ ...settings, [item.key]: e.target.checked })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, [item.key]: e.target.checked })}
                 className="w-4 h-4 rounded text-priv-accent focus:ring-0 bg-priv-card border-priv-border"
               />
               <span className="text-xs font-semibold text-white">{item.label}</span>
