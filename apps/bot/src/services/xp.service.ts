@@ -13,6 +13,44 @@ export class XpService {
   // Anti-spam için son mesaj önbelleği (userId-guildId -> { content, timestamp })
   private lastMessages = new Map<string, { content: string; timestamp: number }>();
 
+  /**
+   * Sunucuda atılan HER geçerli mesajı anında veritabanına işler (Bekleme süresi olmadan!)
+   */
+  public async recordMessage(guildId: string, userId: string, channel?: TextChannel, client?: Client) {
+    const userGuild = await prisma.userGuild.upsert({
+      where: { userId_guildId: { userId, guildId } },
+      update: {
+        messageCount: { increment: 1 },
+      },
+      create: {
+        userId,
+        guildId,
+        messageCount: 1,
+      },
+    });
+
+    // Görev ilerlemesini güncelle
+    await questService.incrementProgress(guildId, userId, 'MESSAGE_COUNT', 1).catch(() => {});
+
+    // Başarım kontrolleri
+    if (client && channel) {
+      if (userGuild.messageCount >= 100) {
+        await achievementService.checkAndUnlock(guildId, userId, 'CHATTERBOX', client, channel).catch(() => {});
+      }
+      if (userGuild.messageCount >= 1000) {
+        await achievementService.checkAndUnlock(guildId, userId, 'MESSAGE_MASTER', client, channel).catch(() => {});
+      }
+
+      // Gece kuşu kontrolü (02:00 - 05:00 arası)
+      const hour = new Date().getHours();
+      if (hour >= 2 && hour < 5) {
+        await achievementService.checkAndUnlock(guildId, userId, 'NIGHT_OWL', client, channel).catch(() => {});
+      }
+    }
+
+    return userGuild;
+  }
+
   public async addMessageXp(guildId: string, userId: string, messageContent: string, channel: TextChannel, client: Client) {
     const settings = await guildService.getGuildSettings(guildId);
     if (!settings.levelEnabled) return;
@@ -21,7 +59,7 @@ export class XpService {
     const now = Date.now();
     const last = this.lastMessages.get(cacheKey);
 
-    // 45 saniye XP bekleme süresi
+    // 45 saniye XP bekleme süresi (Sadece XP için geçerlidir, mesaj sayısını etkilemez)
     if (last && now - last.timestamp < 45000) {
       return;
     }
@@ -40,32 +78,13 @@ export class XpService {
       where: { userId_guildId: { userId, guildId } },
       update: {
         xp: { increment: gainedXp },
-        messageCount: { increment: 1 },
       },
       create: {
         userId,
         guildId,
         xp: gainedXp,
-        messageCount: 1,
       },
     });
-
-    // Görev ilerlemesini güncelle
-    await questService.incrementProgress(guildId, userId, 'MESSAGE_COUNT', 1);
-
-    // Başarım kontrolleri
-    if (userGuild.messageCount >= 100) {
-      await achievementService.checkAndUnlock(guildId, userId, 'CHATTERBOX', client, channel);
-    }
-    if (userGuild.messageCount >= 1000) {
-      await achievementService.checkAndUnlock(guildId, userId, 'MESSAGE_MASTER', client, channel);
-    }
-
-    // Gece kuşu kontrolü (02:00 - 05:00 arası)
-    const hour = new Date().getHours();
-    if (hour >= 2 && hour < 5) {
-      await achievementService.checkAndUnlock(guildId, userId, 'NIGHT_OWL', client, channel);
-    }
 
     // Seviye atlama kontrolü
     const newLevel = getLevelFromXp(userGuild.xp);

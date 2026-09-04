@@ -11,14 +11,104 @@ import {
 } from 'discord.js';
 import { guildService } from './guild.service';
 import { xpService } from './xp.service';
+import { questService } from './quest.service';
 import { createEmbed } from '../utils/embed';
 import { DEFAULT_COLORS } from '@priv/shared';
+import { logger } from '../utils/logger';
 
 export const DEFAULT_TEMP_VOICE_CHANNEL_ID = '1545543780818755626';
 
+export interface ActiveVoiceSession {
+  channelId: string;
+  joinedAt: number;
+  lastFlushedAt: number;
+}
+
 export class VoiceService {
-  // Aktif ses oturumları (guildId-userId -> { channelId, joinedAt })
-  private activeSessions = new Map<string, { channelId: string; joinedAt: number }>();
+  // Aktif ses oturumları (guildId:userId -> { channelId, joinedAt, lastFlushedAt })
+  private activeSessions = new Map<string, ActiveVoiceSession>();
+  private trackerInterval: NodeJS.Timeout | null = null;
+
+  /**
+   * Bot başladığında seste olan tüm kullanıcıları hafızaya alır
+   */
+  public initVoiceSessions(client: Client) {
+    const now = Date.now();
+    let count = 0;
+    for (const [, guild] of client.guilds.cache) {
+      const afkId = guild.afkChannelId;
+      for (const [, channel] of guild.channels.cache) {
+        if (channel.isVoiceBased() && channel.id !== afkId) {
+          for (const [memberId, member] of channel.members) {
+            if (!member.user.bot) {
+              const key = `${guild.id}:${memberId}`;
+              this.activeSessions.set(key, {
+                channelId: channel.id,
+                joinedAt: now,
+                lastFlushedAt: now,
+              });
+              count++;
+            }
+          }
+        }
+      }
+    }
+    logger.info(`[VOICE] ${count} aktif ses oturumu hafızaya alındı.`);
+  }
+
+  /**
+   * Her 60 saniyede bir seste olan tüm kullanıcıların sürelerini ve XP'lerini veritabanına kaydeder.
+   * Bot yeniden başlasa bile süreler asla kaybolmaz!
+   */
+  public startVoiceTracker(client: Client) {
+    if (this.trackerInterval) return;
+
+    this.trackerInterval = setInterval(async () => {
+      const now = Date.now();
+      for (const [cacheKey, session] of this.activeSessions.entries()) {
+        const [guildId, userId] = cacheKey.split(':');
+        const elapsedSecs = Math.floor((now - session.lastFlushedAt) / 1000);
+
+        if (elapsedSecs >= 60) {
+          const minutes = Math.floor(elapsedSecs / 60);
+          const flushSeconds = minutes * 60;
+          session.lastFlushedAt += flushSeconds * 1000;
+
+          try {
+            await prisma.userGuild.upsert({
+              where: { userId_guildId: { userId, guildId } },
+              update: {
+                voiceSeconds: { increment: flushSeconds },
+                xp: { increment: minutes * 5 },
+              },
+              create: {
+                userId,
+                guildId,
+                voiceSeconds: flushSeconds,
+                xp: minutes * 5,
+              },
+            });
+
+            await questService.incrementProgress(guildId, userId, 'VOICE_TIME', flushSeconds).catch(() => {});
+          } catch (e) {
+            // sessiz
+          }
+        }
+      }
+    }, 60000);
+  }
+
+  /**
+   * Profil komutu için saniyeye kadar anlık canlı ses süresi
+   */
+  public getLiveVoiceSeconds(guildId: string, userId: string, dbVoiceSeconds: number): number {
+    const session = this.activeSessions.get(`${guildId}:${userId}`);
+    if (session) {
+      const pendingSeconds = Math.floor((Date.now() - session.lastFlushedAt) / 1000);
+      return dbVoiceSeconds + Math.max(0, pendingSeconds);
+    }
+    return dbVoiceSeconds;
+  }
 
   public async handleVoiceState(oldState: VoiceState, newState: VoiceState, client: Client) {
     const member = newState.member || oldState.member;
@@ -72,24 +162,44 @@ export class VoiceService {
     if (oldState.channelId && oldState.channelId !== newState.channelId) {
       const session = this.activeSessions.get(cacheKey);
       if (session) {
-        const durationSeconds = Math.floor((Date.now() - session.joinedAt) / 1000);
+        const now = Date.now();
+        const unFlushedSeconds = Math.floor((now - session.lastFlushedAt) / 1000);
+        const totalDurationSeconds = Math.floor((now - session.joinedAt) / 1000);
         this.activeSessions.delete(cacheKey);
 
-        // AFK kanalı veya 15 saniyeden kısa süreleri (spam bağlantı) sayma
         const afkChannelId = oldState.guild.afkChannelId;
-        if (oldState.channelId !== afkChannelId && durationSeconds >= 15) {
-          await prisma.voiceSession.create({
-            data: {
-              guildId,
-              userId,
-              channelId: oldState.channelId,
-              joinedAt: new Date(session.joinedAt),
-              leftAt: new Date(),
-              durationSeconds,
-            },
-          });
+        if (oldState.channelId !== afkChannelId) {
+          // Kalan saniyeleri veritabanına işle
+          if (unFlushedSeconds >= 5) {
+            await prisma.userGuild.upsert({
+              where: { userId_guildId: { userId, guildId } },
+              update: {
+                voiceSeconds: { increment: unFlushedSeconds },
+                xp: { increment: Math.floor(unFlushedSeconds / 60) * 5 },
+              },
+              create: {
+                userId,
+                guildId,
+                voiceSeconds: unFlushedSeconds,
+                xp: Math.floor(unFlushedSeconds / 60) * 5,
+              },
+            }).catch(() => {});
 
-          await xpService.addVoiceXp(guildId, userId, durationSeconds, client);
+            await questService.incrementProgress(guildId, userId, 'VOICE_TIME', unFlushedSeconds).catch(() => {});
+          }
+
+          if (totalDurationSeconds >= 10) {
+            await prisma.voiceSession.create({
+              data: {
+                guildId,
+                userId,
+                channelId: oldState.channelId,
+                joinedAt: new Date(session.joinedAt),
+                leftAt: new Date(now),
+                durationSeconds: totalDurationSeconds,
+              },
+            }).catch(() => {});
+          }
         }
       }
     }
@@ -98,9 +208,11 @@ export class VoiceService {
     if (newState.channelId && newState.channelId !== oldState.channelId) {
       const afkChannelId = newState.guild.afkChannelId;
       if (newState.channelId !== afkChannelId) {
+        const now = Date.now();
         this.activeSessions.set(cacheKey, {
           channelId: newState.channelId,
-          joinedAt: Date.now(),
+          joinedAt: now,
+          lastFlushedAt: now,
         });
       }
     }

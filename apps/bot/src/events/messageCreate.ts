@@ -73,6 +73,14 @@ export async function onMessageCreate(message: Message) {
   const violated = await autoModService.processMessage(message);
   if (violated) return;
 
+  // 2.5. Mesaj Sayısını Say (45 saniye XP beklemesinden bağımsız olarak her mesaj anında kaydedilir!)
+  await xpService.recordMessage(
+    message.guild.id,
+    message.author.id,
+    message.channel instanceof TextChannel ? message.channel : undefined,
+    message.client
+  );
+
   // 3. XP & Seviye Kazanımı
   if (message.channel instanceof TextChannel) {
     await xpService.addMessageXp(

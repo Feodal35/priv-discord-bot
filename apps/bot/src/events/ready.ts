@@ -92,6 +92,8 @@ export async function onReady(client: Client) {
 
   // 5.1. Sesteki mevcut kullanıcıların sürelerini başlat
   initVoiceSessionsFromGuilds(client);
+  voiceService.initVoiceSessions(client);
+  voiceService.startVoiceTracker(client);
 
   // 6. Klan / Guild Rolü (1543392872504762498) Sıkı Denetimi:
   //    Klanı olmayan/salanlardan rolü geri alır, klanı olanlara rolü verir!

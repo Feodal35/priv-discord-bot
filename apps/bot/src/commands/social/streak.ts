@@ -47,7 +47,7 @@ export const streakCommand: SlashCommand = {
       description: `Mevcut serin: **${profile.streak} Gün** 🔥\n\nHer gün \`/günlük\` komutunu kullanarak serini sürdür ve özel ödüller kazan!`,
       color: DEFAULT_COLORS.GOLD as any,
       fields: milestoneFields,
-      footer: { text: 'Seriyi korumak için her gün 20-48 saat aralığında /günlük komutunu kullanmalısın.' },
+      footer: { text: 'Vip Metro • Her gün /günlük alarak serini sürdür (Ödüller her gece 00:00\'da yenilenir).' },
       timestamp: false,
     });
 

@@ -1,6 +1,7 @@
 import { prisma } from '@priv/database';
 import { UserProfileDto, getLevelProgress } from '@priv/shared';
 import { Client } from 'discord.js';
+import { voiceService } from './voice.service';
 
 export class UserService {
   public async getOrCreateUser(userId: string, username: string, avatar?: string | null) {
@@ -81,6 +82,8 @@ export class UserService {
       parsedBadges = [];
     }
 
+    const liveVoiceSeconds = voiceService.getLiveVoiceSeconds(guildId, userId, userGuild.voiceSeconds);
+
     return {
       userId,
       guildId,
@@ -95,7 +98,7 @@ export class UserService {
       bankCoins: userGuild.bankCoins,
       streak: userGuild.dailyStreak,
       messageCount: userGuild.messageCount,
-      voiceHours: userGuild.voiceSeconds / 3600,
+      voiceHours: liveVoiceSeconds / 3600,
       achievementCount,
       rank,
       joinedAt: userGuild.createdAt,

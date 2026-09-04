@@ -15,9 +15,43 @@ export interface DailyClaimResult {
   milestoneTitle: string;
 }
 
+function getIstanbulDateKey(d: Date): string {
+  return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Istanbul' });
+}
+
+function getDaysDifferenceIstanbul(past: Date, current: Date): number {
+  const pStr = getIstanbulDateKey(past);
+  const cStr = getIstanbulDateKey(current);
+  const pTime = new Date(pStr + 'T00:00:00Z').getTime();
+  const cTime = new Date(cStr + 'T00:00:00Z').getTime();
+  return Math.round((cTime - pTime) / (1000 * 60 * 60 * 24));
+}
+
+function getTimeUntilMidnightIstanbul(): { hours: number; minutes: number } {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Istanbul',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value || '0', 10);
+  const minute = parseInt(parts.find((p) => p.type === 'minute')?.value || '0', 10);
+  const second = parseInt(parts.find((p) => p.type === 'second')?.value || '0', 10);
+
+  const secondsPassedToday = hour * 3600 + minute * 60 + second;
+  const secondsLeft = Math.max(0, 86400 - secondsPassedToday);
+  return {
+    hours: Math.floor(secondsLeft / 3600),
+    minutes: Math.floor((secondsLeft % 3600) / 60),
+  };
+}
+
 export class StreakService {
   /**
-   * Günlük streak ve günlük ödül alma işlemi
+   * Günlük streak ve günlük ödül alma işlemi (Türkiye Saati Gece 00:00 bazlı)
    */
   public async claimDaily(
     guildId: string,
@@ -34,16 +68,16 @@ export class StreakService {
     const lastClaim = userGuild?.lastDailyClaim;
 
     if (lastClaim) {
-      const diffMs = now.getTime() - lastClaim.getTime();
-      const diffHours = diffMs / (1000 * 60 * 60);
+      const daysDiff = getDaysDifferenceIstanbul(lastClaim, now);
+      const diffHours = (now.getTime() - lastClaim.getTime()) / (1000 * 60 * 60);
 
-      // 20 saatten önce tekrar alınamaz
-      if (diffHours < 20) {
-        const remainingHours = Math.ceil(20 - diffHours);
+      // Aynı takvim günü içinde tekrar ödül alınamaz
+      if (daysDiff === 0) {
+        const { hours, minutes } = getTimeUntilMidnightIstanbul();
         return {
           success: false,
           alreadyClaimed: true,
-          message: `Günlük ödülünü zaten aldın. Tekrar alabilmek için **${remainingHours} saat** beklemelisin.`,
+          message: `Bugünkü günlük ödülünü zaten aldın! Mevcut serin: **${userGuild?.dailyStreak || 0} Gün** 🔥\nBir sonraki ödülün bu gece 00:00'da (**${hours} saat ${minutes} dakika sonra**) açılacak.`,
           streak: userGuild?.dailyStreak || 0,
           streakReset: false,
           rewardCoins: 0,
@@ -52,10 +86,12 @@ export class StreakService {
         };
       }
 
-      // 48 saatten fazla geçtiyse streak sıfırlanır
+      // Günlük streak hesaplama (Dün alındıysa veya 48 saat içindeyse seriyi koru/artır)
       let newStreak = (userGuild?.dailyStreak || 0) + 1;
       let streakReset = false;
-      if (diffHours > 48) {
+
+      if (daysDiff > 1 && diffHours > 48) {
+        // 48 saatten ve 1 takvim gününden fazla kaçırıldıysa sıfırla
         newStreak = 1;
         streakReset = true;
       }
@@ -155,7 +191,7 @@ export class StreakService {
       return {
         success: true,
         alreadyClaimed: false,
-        message: 'İlk günlük ödülün hesabına yatırıldı!',
+        message: 'İlk günlük ödülün başarıyla hesabına yatırıldı! Her gün gelerek serini artırabilirsin.',
         streak: 1,
         streakReset: false,
         rewardCoins: totalCoins,
