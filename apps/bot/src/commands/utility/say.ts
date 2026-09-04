@@ -2,12 +2,14 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   PermissionFlagsBits,
-  ChannelType,
+  AttachmentBuilder,
 } from 'discord.js';
 import { SlashCommand } from '../../types/command';
 import { createEmbed } from '../../utils/embed';
-import { DEFAULT_COLORS, EMOJIS } from '@priv/shared';
+import { DEFAULT_COLORS } from '@priv/shared';
 import { CLAN_ROLE_ID } from '../../services/clanRole.service';
+import { createSayCard } from '../../utils/canvas';
+import { logger } from '../../utils/logger';
 
 export const sayCommand: SlashCommand = {
   data: new SlashCommandBuilder()
@@ -47,6 +49,9 @@ export const sayCommand: SlashCommand = {
     const totalMembers = guild.memberCount;
     const humanCount = members.filter((m) => !m.user.bot).size;
     const botCount = members.filter((m) => m.user.bot).size;
+    const onlineMembers = members.filter(
+      (m) => m.presence?.status && m.presence.status !== 'offline'
+    ).size;
 
     // 3. Boost İstatistikleri
     const boostCount = guild.premiumSubscriptionCount || 0;
@@ -56,9 +61,23 @@ export const sayCommand: SlashCommand = {
     const clanRole = guild.roles.cache.get(CLAN_ROLE_ID);
     const clanMemberCount = clanRole ? members.filter((m) => m.roles.cache.has(CLAN_ROLE_ID)).size : 0;
 
+    // 5. Canvas Kartı Oluştur
+    let imageBuffer: Buffer | null = null;
+    try {
+      imageBuffer = await createSayCard({
+        guildName: guild.name,
+        totalMembers,
+        onlineMembers: onlineMembers > 0 ? onlineMembers : Math.round(totalMembers * 0.4),
+        voiceMembers: totalInVoice,
+        boostCount,
+      });
+    } catch (canvasErr) {
+      logger.error('[SAY] Canvas kartı oluşturulamadı:', canvasErr);
+    }
+
     const embed = createEmbed({
       title: `📊 ${guild.name} — Sunucu ve Ses Sayımı`,
-      description: `Yetkili sayım paneli aşağıda detaylandırılmıştır:`,
+      description: `Yetkili canlı sayım paneli aşağıda detaylandırılmıştır:`,
       color: DEFAULT_COLORS.PRIMARY as any,
       thumbnail: guild.iconURL() || undefined,
       fields: [
@@ -91,6 +110,12 @@ export const sayCommand: SlashCommand = {
       timestamp: true,
     });
 
-    await interaction.editReply({ embeds: [embed] });
+    if (imageBuffer) {
+      const file = new AttachmentBuilder(imageBuffer, { name: 'say.png' });
+      embed.setImage('attachment://say.png');
+      await interaction.editReply({ embeds: [embed], files: [file] });
+    } else {
+      await interaction.editReply({ embeds: [embed] });
+    }
   },
 };

@@ -1297,3 +1297,435 @@ export async function createWelcomeCard(opts: {
 
   return canvas.toBuffer('image/png') as unknown as Buffer;
 }
+
+// ─────────────────────────────────────────────────────────────
+// 8. KAYIT YETKİLİSİ İSTATİSTİK KARTI (Canvas)
+// ─────────────────────────────────────────────────────────────
+
+export interface StaffRegisterCardOptions {
+  avatarUrl: string;
+  username: string;
+  guildName: string;
+  total: number;
+  male: number;
+  female: number;
+  rank?: number;
+}
+
+export async function createStaffRegisterCard(opts: StaffRegisterCardOptions): Promise<Buffer> {
+  const CW = 800;
+  const CH = 300;
+  const canvas = createCanvas(CW, CH);
+  const ctx = canvas.getContext('2d');
+
+  // Arka plan: Koyu fütüristik degrade
+  const bgGrad = ctx.createLinearGradient(0, 0, CW, CH);
+  bgGrad.addColorStop(0, '#0d0e17');
+  bgGrad.addColorStop(0.5, '#151728');
+  bgGrad.addColorStop(1, '#0e101f');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Arka plan neon ışıltıları
+  const glow1 = ctx.createRadialGradient(120, 150, 10, 120, 150, 200);
+  glow1.addColorStop(0, 'rgba(88, 101, 242, 0.25)');
+  glow1.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow1;
+  ctx.fillRect(0, 0, CW, CH);
+
+  const glow2 = ctx.createRadialGradient(700, 80, 10, 700, 80, 250);
+  glow2.addColorStop(0, 'rgba(235, 69, 158, 0.18)');
+  glow2.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow2;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Ana kart dış çerçeve
+  ctx.save();
+  clipRoundRect(ctx, 12, 12, CW - 24, CH - 24, 20);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // Sol Panel: Avatar & Profil
+  const AVS = 110;
+  const AVX = 40;
+  const AVY = 55;
+  const acx = AVX + AVS / 2;
+  const acy = AVY + AVS / 2;
+
+  // Avatar gölgesi
+  ctx.save();
+  ctx.shadowColor = 'rgba(88, 101, 242, 0.5)';
+  ctx.shadowBlur = 25;
+  ctx.beginPath();
+  ctx.arc(acx, acy, AVS / 2 + 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#1e1f38';
+  ctx.fill();
+  ctx.restore();
+
+  // Avatar resmi
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(acx, acy, AVS / 2, 0, Math.PI * 2);
+  ctx.clip();
+  try {
+    const buf = await fetchBuf(opts.avatarUrl.replace('.webp', '.png').split('?')[0] + '?size=256');
+    const img = await loadImage(buf);
+    ctx.drawImage(img, AVX, AVY, AVS, AVS);
+  } catch {
+    ctx.fillStyle = '#2b2c4d';
+    ctx.fillRect(AVX, AVY, AVS, AVS);
+  }
+  ctx.restore();
+
+  // Avatar neon halka
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(acx, acy, AVS / 2 + 2, 0, Math.PI * 2);
+  const ring = ctx.createLinearGradient(AVX, AVY, AVX + AVS, AVY + AVS);
+  ring.addColorStop(0, '#5865F2');
+  ring.addColorStop(0.5, '#a259ff');
+  ring.addColorStop(1, '#ff6b9d');
+  ctx.strokeStyle = ring;
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // Kullanıcı adı
+  ctx.save();
+  ctx.font = 'bold 20px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  const nameToDraw = opts.username.length > 14 ? opts.username.substring(0, 12) + '...' : opts.username;
+  ctx.fillText(nameToDraw, acx, AVY + AVS + 32);
+
+  // Sunucu etiketi
+  ctx.font = '12px sans-serif';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+  const guildToDraw = opts.guildName.length > 16 ? opts.guildName.substring(0, 14) + '...' : opts.guildName;
+  ctx.fillText(guildToDraw, acx, AVY + AVS + 52);
+  ctx.restore();
+
+  // Sağ Bölüm: İstatistik Kutuları
+  const RX = 205;
+
+  // Başlık etiketi
+  ctx.save();
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillStyle = '#5865F2';
+  ctx.fillText('YETKİLİ KAYIT PERFORMANSI', RX, 42);
+
+  ctx.font = 'bold 24px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('Kayıt İstatistikleri', RX, 70);
+  ctx.restore();
+
+  // 3 Adet Widget Kutusu
+  const boxW = 175;
+  const boxH = 90;
+  const boxY = 92;
+  const gap = 16;
+
+  const boxes = [
+    { label: 'TOPLAM KAYIT', val: opts.total, color: '#a259ff', bgGlow: 'rgba(162, 89, 255, 0.15)' },
+    { label: 'ERKEK KAYIT', val: opts.male, color: '#3498db', bgGlow: 'rgba(52, 152, 219, 0.15)' },
+    { label: 'KIZ KAYIT', val: opts.female, color: '#ff6b9d', bgGlow: 'rgba(255, 107, 157, 0.15)' },
+  ];
+
+  boxes.forEach((b, i) => {
+    const bx = RX + i * (boxW + gap);
+
+    // Kutu arka planı
+    ctx.save();
+    clipRoundRect(ctx, bx, boxY, boxW, boxH, 14);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.09)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Üst renkli çizgi vurgusu
+    ctx.fillStyle = b.color;
+    ctx.fillRect(bx + 14, boxY, boxW - 28, 3);
+    ctx.restore();
+
+    // Kutu içi metinler
+    ctx.save();
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillStyle = b.color;
+    ctx.fillText(b.label, bx + 16, boxY + 28);
+
+    ctx.font = 'bold 36px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(String(b.val), bx + 16, boxY + 70);
+    ctx.restore();
+  });
+
+  // Dağılım Çubuğu (Erkek vs Kız Oranı)
+  const barX = RX;
+  const barY = 205;
+  const barW = boxW * 3 + gap * 2;
+  const barH = 14;
+
+  const malePercent = opts.total > 0 ? Math.round((opts.male / opts.total) * 100) : 50;
+  const femalePercent = 100 - malePercent;
+
+  // Dağılım metni
+  ctx.save();
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillStyle = '#3498db';
+  ctx.fillText(`♂ Erkek %${malePercent}`, barX, barY - 8);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ff6b9d';
+  ctx.fillText(`♀ Kız %${femalePercent}`, barX + barW, barY - 8);
+  ctx.restore();
+
+  // Dağılım çubuğu arka planı
+  ctx.save();
+  clipRoundRect(ctx, barX, barY, barW, barH, 7);
+  ctx.fillStyle = '#222338';
+  ctx.fill();
+
+  // Erkek kısmı (sol taraf mavi)
+  const maleWidth = Math.max(4, Math.min(barW - 4, (barW * malePercent) / 100));
+  ctx.fillStyle = '#3498db';
+  ctx.fillRect(barX, barY, maleWidth, barH);
+
+  // Kız kısmı (sağ taraf pembe)
+  ctx.fillStyle = '#ff6b9d';
+  ctx.fillRect(barX + maleWidth, barY, barW - maleWidth, barH);
+  ctx.restore();
+
+  return canvas.toBuffer('image/png') as unknown as Buffer;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 9. SUNUCU KAYIT LİDERLİK TABLOSU (Canvas Leaderboard)
+// ─────────────────────────────────────────────────────────────
+
+export interface RegisterLeaderboardEntry {
+  rank: number;
+  avatarUrl: string;
+  username: string;
+  total: number;
+  male: number;
+  female: number;
+}
+
+export interface RegisterLeaderboardOptions {
+  guildName: string;
+  entries: RegisterLeaderboardEntry[];
+}
+
+export async function createRegisterLeaderboardCard(opts: RegisterLeaderboardOptions): Promise<Buffer> {
+  const CW = 850;
+  const rowCount = Math.max(1, Math.min(opts.entries.length, 5));
+  const CH = 140 + rowCount * 76;
+  const canvas = createCanvas(CW, CH);
+  const ctx = canvas.getContext('2d');
+
+  // Arka plan degrade
+  const bg = ctx.createLinearGradient(0, 0, CW, CH);
+  bg.addColorStop(0, '#0c0d17');
+  bg.addColorStop(0.5, '#131526');
+  bg.addColorStop(1, '#0e0f1d');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Başlık
+  ctx.save();
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillStyle = '#f39c12';
+  ctx.fillText('LİDERLİK SIRALAMASI', 35, 42);
+
+  ctx.font = 'bold 26px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(`🏆 ${opts.guildName} — En Çok Kayıt Yapanlar`, 35, 75);
+
+  ctx.font = '13px sans-serif';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.fillText('Sunucuda en çok üye kaydeden yetkililer listelenmiştir.', 35, 98);
+  ctx.restore();
+
+  // Satırlar
+  const startY = 122;
+  const rowH = 64;
+  const rowGap = 12;
+
+  for (let i = 0; i < rowCount; i++) {
+    const entry = opts.entries[i];
+    const ry = startY + i * (rowH + rowGap);
+    const rx = 35;
+    const rw = CW - 70;
+
+    // Satır arka planı
+    ctx.save();
+    clipRoundRect(ctx, rx, ry, rw, rowH, 12);
+    if (i === 0) {
+      ctx.fillStyle = 'rgba(243, 156, 18, 0.12)';
+      ctx.strokeStyle = 'rgba(243, 156, 18, 0.4)';
+    } else if (i === 1) {
+      ctx.fillStyle = 'rgba(189, 195, 199, 0.1)';
+      ctx.strokeStyle = 'rgba(189, 195, 199, 0.3)';
+    } else if (i === 2) {
+      ctx.fillStyle = 'rgba(211, 84, 0, 0.1)';
+      ctx.strokeStyle = 'rgba(211, 84, 0, 0.3)';
+    } else {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+    }
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+
+    // Sıralama Numarası / Rozeti
+    const rankColors = ['#f1c40f', '#bdc3c7', '#e67e22', '#7f8c8d', '#7f8c8d'];
+    const rankColor = rankColors[i] || '#7f8c8d';
+
+    ctx.save();
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillStyle = rankColor;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`#${entry.rank}`, rx + 30, ry + rowH / 2);
+    ctx.restore();
+
+    // Avatar
+    const avS = 44;
+    const avX = rx + 65;
+    const avY = ry + (rowH - avS) / 2;
+    const avCx = avX + avS / 2;
+    const avCy = avY + avS / 2;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avCx, avCy, avS / 2, 0, Math.PI * 2);
+    ctx.clip();
+    try {
+      const buf = await fetchBuf(entry.avatarUrl.replace('.webp', '.png').split('?')[0] + '?size=128');
+      const img = await loadImage(buf);
+      ctx.drawImage(img, avX, avY, avS, avS);
+    } catch {
+      ctx.fillStyle = '#2b2c4d';
+      ctx.fillRect(avX, avY, avS, avS);
+    }
+    ctx.restore();
+
+    // Kullanıcı Adı
+    ctx.save();
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textBaseline = 'middle';
+    const nameDraw = entry.username.length > 20 ? entry.username.substring(0, 18) + '...' : entry.username;
+    ctx.fillText(nameDraw, avX + avS + 18, ry + rowH / 2);
+    ctx.restore();
+
+    // Sağ Bölüm: Toplam Kayıt ve Cinsiyet Dağılımı
+    ctx.save();
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`${entry.total} Kayıt`, rx + rw - 24, ry + rowH / 2 - 8);
+
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.fillText(`♂️ ${entry.male}  •  ♀️ ${entry.female}`, rx + rw - 24, ry + rowH / 2 + 14);
+    ctx.restore();
+  }
+
+  return canvas.toBuffer('image/png') as unknown as Buffer;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 10. SUNUCU SAY İSTATİSTİK KARTI (Canvas Say)
+// ─────────────────────────────────────────────────────────────
+
+export interface SayCardOptions {
+  guildName: string;
+  totalMembers: number;
+  onlineMembers: number;
+  voiceMembers: number;
+  boostCount: number;
+}
+
+export async function createSayCard(opts: SayCardOptions): Promise<Buffer> {
+  const CW = 800;
+  const CH = 260;
+  const canvas = createCanvas(CW, CH);
+  const ctx = canvas.getContext('2d');
+
+  // Arka plan degrade
+  const bg = ctx.createLinearGradient(0, 0, CW, CH);
+  bg.addColorStop(0, '#0d0f1a');
+  bg.addColorStop(0.5, '#14172a');
+  bg.addColorStop(1, '#0e101f');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Başlık
+  ctx.save();
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillStyle = '#5865F2';
+  ctx.fillText('SUNUCU AKTİFLİK İSTATİSTİĞİ', 35, 38);
+
+  ctx.font = 'bold 26px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(`📊 ${opts.guildName} — Canlı Sayaç`, 35, 72);
+  ctx.restore();
+
+  // 4 Adet Sayaç Kutusu
+  const boxW = 168;
+  const boxH = 120;
+  const boxY = 96;
+  const startX = 35;
+  const gap = 18;
+
+  const boxes = [
+    { label: 'TOPLAM ÜYE', val: opts.totalMembers, color: '#5865F2', sub: 'Sunucu Geneli' },
+    { label: 'ÇEVRİM İÇİ', val: opts.onlineMembers, color: '#2ecc71', sub: 'Aktif Üyeler' },
+    { label: 'SESTEKİLER', val: opts.voiceMembers, color: '#e67e22', sub: 'Ses Odalarında' },
+    { label: 'BOOST SAYISI', val: opts.boostCount, color: '#f47fff', sub: 'Takviyeler' },
+  ];
+
+  boxes.forEach((b, i) => {
+    const bx = startX + i * (boxW + gap);
+
+    // Kutu arka planı
+    ctx.save();
+    clipRoundRect(ctx, bx, boxY, boxW, boxH, 14);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Üst renkli çizgi
+    ctx.fillStyle = b.color;
+    ctx.fillRect(bx + 16, boxY, boxW - 32, 3);
+    ctx.restore();
+
+    // Metinler
+    ctx.save();
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillStyle = b.color;
+    ctx.fillText(b.label, bx + 16, boxY + 28);
+
+    ctx.font = 'bold 36px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(String(b.val), bx + 16, boxY + 74);
+
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.fillText(b.sub, bx + 16, boxY + 98);
+    ctx.restore();
+  });
+
+  return canvas.toBuffer('image/png') as unknown as Buffer;
+}
+
