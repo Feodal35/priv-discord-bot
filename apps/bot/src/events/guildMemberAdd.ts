@@ -2,6 +2,7 @@ import { GuildMember, TextChannel, AttachmentBuilder } from 'discord.js';
 import { guildService } from '../services/guild.service';
 import { logService } from '../services/log.service';
 import { achievementService } from '../services/achievement.service';
+import { clanRoleService } from '../services/clanRole.service';
 import { createEmbed } from '../utils/embed';
 import { DEFAULT_COLORS } from '@priv/shared';
 import { createWelcomeCard } from '../utils/canvas';
@@ -14,27 +15,11 @@ export async function onGuildMemberAdd(member: GuildMember) {
   const guild = member.guild;
   const settings = await guildService.getGuildSettings(guild.id);
 
-  // 1. OTOMATİK ROL VERME (1543033008318316654)
+  // 1. KLAN / GUILD ROLÜ DENETİMİ (1543033008318316654)
   try {
-    const roleToAssign = AUTO_ROLE_ID || settings.autoRoleId;
-    if (roleToAssign) {
-      let role = guild.roles.cache.get(roleToAssign);
-      if (!role) {
-        role = await guild.roles.fetch(roleToAssign).catch(() => null) || undefined;
-      }
-
-      if (role) {
-        const botMember = guild.members.me;
-        if (botMember?.permissions.has('ManageRoles') && botMember.roles.highest.position > role.position) {
-          await member.roles.add(role);
-          logger.info(`✅ [OTO-ROL] ${member.user.tag} kullanıcısına ${role.name} (${role.id}) rolü verildi.`);
-        } else {
-          logger.warn(`⚠️ [OTO-ROL] Botun rol verme yetkisi veya rol sırası yetersiz! Rol: ${role.name}`);
-        }
-      }
-    }
+    await clanRoleService.checkAndSyncMember(member);
   } catch (error) {
-    logger.error(`[OTO-ROL] Rol verilirken hata oluştu (${member.id}):`, error);
+    logger.error(`[CLAN_ROLE] Yeni üye kontrolünde hata (${member.id}):`, error);
   }
 
   // 2. ULTRA KALİTELİ CANVAS HOŞ GELDİN KARTI

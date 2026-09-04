@@ -57,6 +57,8 @@ import { onMessageCreate } from './events/messageCreate';
 import { onVoiceStateUpdate } from './events/voiceStateUpdate';
 import { onGuildMemberAdd } from './events/guildMemberAdd';
 import { onGuildMemberRemove } from './events/guildMemberRemove';
+import { onGuildMemberUpdate } from './events/guildMemberUpdate';
+import { onUserUpdate } from './events/userUpdate';
 import { onMessageDelete } from './events/messageDelete';
 import { onMessageUpdate } from './events/messageUpdate';
 
@@ -122,6 +124,8 @@ export function createDiscordClient(): Client {
   client.on('voiceStateUpdate', onVoiceStateUpdate);
   client.on('guildMemberAdd', onGuildMemberAdd);
   client.on('guildMemberRemove', onGuildMemberRemove);
+  client.on('guildMemberUpdate', onGuildMemberUpdate);
+  client.on('userUpdate', onUserUpdate);
   client.on('messageDelete', onMessageDelete);
   client.on('messageUpdate', onMessageUpdate);
 
