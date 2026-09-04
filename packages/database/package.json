@@ -13,8 +13,6 @@
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
-    "@priv/shared": "*",
-    "@priv/config": "*",
     "prisma": "^5.18.0",
     "typescript": "^5.5.4"
   },
