@@ -1,8 +1,9 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, AttachmentBuilder } from 'discord.js';
 import { SlashCommand } from '../../types/command';
 import { userService } from '../../services/user.service';
 import { createEmbed } from '../../utils/embed';
 import { STREAK_MILESTONES, DEFAULT_COLORS, EMOJIS, formatCurrency } from '@priv/shared';
+import { createStreakCard } from '../../utils/canvas';
 
 export const streakCommand: SlashCommand = {
   data: new SlashCommandBuilder()
@@ -15,7 +16,21 @@ export const streakCommand: SlashCommand = {
       return;
     }
 
+    await interaction.deferReply();
+
     const profile = await userService.getUserProfile(interaction.user.id, interaction.guild.id, interaction.client);
+
+    let imageBuffer: Buffer | null = null;
+    try {
+      imageBuffer = await createStreakCard({
+        avatarUrl:  interaction.user.displayAvatarURL({ extension: 'png', size: 256 }),
+        username:   profile.displayName,
+        streak:     profile.streak,
+        milestones: STREAK_MILESTONES,
+      });
+    } catch (err) {
+      console.error('[STREAK] Canvas hatası:', err);
+    }
 
     const milestoneFields = STREAK_MILESTONES.map((m) => {
       const isReached = profile.streak >= m.days;
@@ -28,16 +43,20 @@ export const streakCommand: SlashCommand = {
     });
 
     const embed = createEmbed({
-      title: `${EMOJIS.STREAK} Günlük Streak Bilgisi`,
-      description: `Mevcut serin: **${profile.streak} Gün** 🔥\n\nHer gün sunucuya gelip \`/günlük\` komutunu kullanarak serini sürdür ve özel ödüller kazan!`,
-      color: DEFAULT_COLORS.GOLD,
-      thumbnail: interaction.user.displayAvatarURL(),
+      title: `${EMOJIS.STREAK} Günlük Streak — ${profile.streak} Gün`,
+      description: `Mevcut serin: **${profile.streak} Gün** 🔥\n\nHer gün \`/günlük\` komutunu kullanarak serini sürdür ve özel ödüller kazan!`,
+      color: DEFAULT_COLORS.GOLD as any,
       fields: milestoneFields,
-      footer: {
-        text: 'Seriyi korumak için her gün 20-48 saat aralığında /günlük komutunu kullanmalısın.',
-      },
+      footer: { text: 'Seriyi korumak için her gün 20-48 saat aralığında /günlük komutunu kullanmalısın.' },
+      timestamp: false,
     });
 
-    await interaction.reply({ embeds: [embed] });
+    if (imageBuffer) {
+      const attachment = new AttachmentBuilder(imageBuffer, { name: 'streak.png' });
+      embed.setImage('attachment://streak.png');
+      await interaction.editReply({ embeds: [embed], files: [attachment] });
+    } else {
+      await interaction.editReply({ embeds: [embed] });
+    }
   },
 };

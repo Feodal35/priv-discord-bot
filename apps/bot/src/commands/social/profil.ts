@@ -4,11 +4,13 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  AttachmentBuilder,
 } from 'discord.js';
 import { SlashCommand } from '../../types/command';
 import { userService } from '../../services/user.service';
 import { guildService } from '../../services/guild.service';
 import { createProfileEmbed } from '../../utils/embed';
+import { createProfileCard } from '../../utils/canvas';
 
 export const profilCommand: SlashCommand = {
   data: new SlashCommandBuilder()
@@ -32,7 +34,29 @@ export const profilCommand: SlashCommand = {
     const profile = await userService.getUserProfile(targetUser.id, guildId, interaction.client);
     const settings = await guildService.getGuildSettings(guildId);
 
+    // Canvas profil kartı
+    let imageBuffer: Buffer | null = null;
+    try {
+      imageBuffer = await createProfileCard({
+        avatarUrl:    profile.avatarUrl,
+        username:     profile.displayName,
+        title:        profile.title,
+        bio:          profile.bio,
+        level:        profile.level,
+        xp:           profile.xp,
+        xpNeeded:     profile.xpNeeded,
+        coins:        profile.coins,
+        streak:       profile.streak,
+        rank:         profile.rank,
+        messageCount: profile.messageCount,
+        badges:       profile.badges,
+      });
+    } catch (err) {
+      console.error('[PROFİL] Canvas hatası:', err);
+    }
+
     const embed = createProfileEmbed(profile, settings.currencyName, settings.currencyEmoji);
+    if (imageBuffer) embed.setImage('attachment://profile.png');
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
@@ -53,6 +77,11 @@ export const profilCommand: SlashCommand = {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    await interaction.editReply({ embeds: [embed], components: [row] });
+    if (imageBuffer) {
+      const attachment = new AttachmentBuilder(imageBuffer, { name: 'profile.png' });
+      await interaction.editReply({ embeds: [embed], files: [attachment], components: [row] });
+    } else {
+      await interaction.editReply({ embeds: [embed], components: [row] });
+    }
   },
 };

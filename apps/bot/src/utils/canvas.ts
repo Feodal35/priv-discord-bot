@@ -313,14 +313,742 @@ export async function createLevelCard(
   const ratio = Math.min(xp / xpNeeded, 1);
   const pW = Math.max(bR * 2, bW * ratio);
   const pg = ctx.createLinearGradient(bX, 0, bX + bW, 0);
-  if (level >= 20) { pg.addColorStop(0, '#f39c12'); pg.addColorStop(1, '#e74c3c'); }
-  else if (level >= 10) { pg.addColorStop(0, '#9b59b6'); pg.addColorStop(1, '#3498db'); }
-  else { pg.addColorStop(0, '#5865F2'); pg.addColorStop(1, '#7289da'); }
-
+  pg.addColorStop(0, ringColor);
+  pg.addColorStop(1, '#7289da');
   ctx.save();
   clipRoundRect(ctx, bX, bY, pW, bH, bR);
   ctx.fillStyle = pg;
   ctx.fill();
+  ctx.restore();
+
+  // XP label
+  ctx.save();
+  ctx.font = '11px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(`${xp.toLocaleString('tr-TR')} / ${xpNeeded.toLocaleString('tr-TR')} XP`, bX + bW, bY - 4);
+  ctx.restore();
+
+  return canvas.toBuffer('image/png') as unknown as Buffer;
+}
+
+// ─────────────────────────────────────────────────────────────
+// BALANCE CARD  (520 × 160)
+// ─────────────────────────────────────────────────────────────
+export async function createBalanceCard(opts: {
+  avatarUrl: string;
+  username: string;
+  coins: number;
+  bankCoins: number;
+  total: number;
+  currencyName: string;
+  currencyEmoji: string;
+}): Promise<Buffer> {
+  const CW = 520, CH = 160;
+  const canvas = createCanvas(CW, CH);
+  const ctx = canvas.getContext('2d');
+
+  const bg = ctx.createLinearGradient(0, 0, CW, CH);
+  bg.addColorStop(0, '#0a0a18');
+  bg.addColorStop(1, '#1a1a30');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Gold top border
+  const border = ctx.createLinearGradient(0, 0, CW, 0);
+  border.addColorStop(0,   'rgba(243,156,18,0)');
+  border.addColorStop(0.3, '#f39c12');
+  border.addColorStop(0.7, '#f39c12');
+  border.addColorStop(1,   'rgba(243,156,18,0)');
+  ctx.fillStyle = border;
+  ctx.fillRect(0, 0, CW, 3);
+
+  // Avatar
+  const AVS = 72, AVX = 20, AVY = (CH - AVS) / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(AVX + AVS / 2, AVY + AVS / 2, AVS / 2, 0, Math.PI * 2);
+  ctx.clip();
+  try {
+    const buf = await fetchBuf(opts.avatarUrl.replace('.webp','.png').split('?')[0] + '?size=128');
+    const img = await loadImage(buf);
+    ctx.drawImage(img, AVX, AVY, AVS, AVS);
+  } catch {
+    ctx.fillStyle = '#1e1e3a';
+    ctx.fillRect(AVX, AVY, AVS, AVS);
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(AVX + AVS / 2, AVY + AVS / 2, AVS / 2 + 2, 0, Math.PI * 2);
+  ctx.strokeStyle = '#f39c12';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.restore();
+
+  const TX = AVX + AVS + 18;
+
+  // Username
+  ctx.save();
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'top';
+  ctx.fillText(opts.username + ' — Bakiye', TX, 16);
+  ctx.restore();
+
+  // Three panels
+  const panels = [
+    { label: 'Cüzdan',        val: opts.coins,     color: '#f39c12' },
+    { label: 'Banka',         val: opts.bankCoins, color: '#7289da' },
+    { label: 'Toplam Varlık', val: opts.total,     color: '#2ecc71' },
+  ];
+  const panW = 130, panH = 60, panY = 48, panGap = 8;
+  panels.forEach((p, i) => {
+    const px = TX + i * (panW + panGap);
+    ctx.save();
+    clipRoundRect(ctx, px, panY, panW, panH, 8);
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.fill();
+    ctx.restore();
+
+    // Accent left strip
+    ctx.fillStyle = p.color;
+    ctx.fillRect(px, panY, 3, panH);
+
+    ctx.save();
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.textBaseline = 'top';
+    ctx.fillText(opts.currencyEmoji + ' ' + p.label, px + 10, panY + 8);
+    ctx.restore();
+
+    ctx.save();
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillStyle = p.color;
+    ctx.textBaseline = 'top';
+    ctx.fillText(p.val.toLocaleString('tr-TR'), px + 10, panY + 28);
+    ctx.restore();
+  });
+
+  // Bottom hint
+  ctx.save();
+  ctx.font = '11px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('/günlük ve /çalış ile coin kazan', TX, CH - 10);
+  ctx.restore();
+
+  return canvas.toBuffer('image/png') as unknown as Buffer;
+}
+
+// ─────────────────────────────────────────────────────────────
+// STREAK CARD  (560 × 180)
+// ─────────────────────────────────────────────────────────────
+export async function createStreakCard(opts: {
+  avatarUrl: string;
+  username: string;
+  streak: number;
+  milestones: { days: number; title: string; rewardCoins: number; rewardXp: number }[];
+}): Promise<Buffer> {
+  const CW = 560, CH = 180;
+  const canvas = createCanvas(CW, CH);
+  const ctx = canvas.getContext('2d');
+
+  // BG
+  const bg = ctx.createLinearGradient(0, 0, CW, CH);
+  bg.addColorStop(0, '#0a0a18');
+  bg.addColorStop(1, '#1a100a');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Orange top bar
+  ctx.fillStyle = '#e67e22';
+  ctx.fillRect(0, 0, CW, 3);
+
+  // Big flame emoji/text area
+  const flameX = 20, flameY = 15;
+  ctx.save();
+  ctx.font = '72px sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.fillText('🔥', flameX, flameY);
+  ctx.restore();
+
+  const TX = 115;
+
+  // Streak number
+  ctx.save();
+  ctx.font = 'bold 44px sans-serif';
+  ctx.fillStyle = '#f39c12';
+  ctx.textBaseline = 'top';
+  ctx.fillText(String(opts.streak), TX, 14);
+  ctx.restore();
+
+  ctx.save();
+  ctx.font = '16px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.textBaseline = 'top';
+  ctx.fillText('Günlük Seri  •  ' + opts.username, TX, 64);
+  ctx.restore();
+
+  // Milestone row (dots)
+  const milestones = opts.milestones;
+  const dotY = 115;
+  const spacing = Math.min((CW - 40) / milestones.length, 90);
+
+  milestones.forEach((m, i) => {
+    const mx = 20 + i * spacing + spacing / 2;
+    const reached = opts.streak >= m.days;
+
+    // Line connector
+    if (i < milestones.length - 1) {
+      ctx.save();
+      ctx.strokeStyle = reached ? '#f39c12' : 'rgba(255,255,255,0.1)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash(reached ? [] : [4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(mx + 8, dotY);
+      ctx.lineTo(mx + spacing - 8, dotY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // Dot
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(mx, dotY, 10, 0, Math.PI * 2);
+    ctx.fillStyle = reached ? '#f39c12' : 'rgba(255,255,255,0.12)';
+    ctx.fill();
+    if (reached) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Day label below dot
+    ctx.save();
+    ctx.font = '10px sans-serif';
+    ctx.fillStyle = reached ? '#f39c12' : 'rgba(255,255,255,0.35)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(m.days + 'G', mx, dotY + 14);
+    ctx.restore();
+
+    // Title
+    ctx.save();
+    ctx.font = '9px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(m.title.substring(0, 10), mx, dotY + 27);
+    ctx.restore();
+  });
+
+  return canvas.toBuffer('image/png') as unknown as Buffer;
+}
+
+// ─────────────────────────────────────────────────────────────
+// LEADERBOARD CARD  (600 × 380)
+// ─────────────────────────────────────────────────────────────
+export async function createLeaderboardCard(opts: {
+  title: string;
+  icon: string;
+  entries: { rank: number; username: string; value: string; avatarUrl?: string }[];
+  guildIconUrl?: string;
+}): Promise<Buffer> {
+  const CW = 600, CH = 60 + opts.entries.length * 48;
+  const canvas = createCanvas(CW, Math.max(CH, 200));
+  const ctx = canvas.getContext('2d');
+
+  // BG
+  const bg = ctx.createLinearGradient(0, 0, 0, CH);
+  bg.addColorStop(0, '#0a0a18');
+  bg.addColorStop(1, '#12122a');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CW, Math.max(CH, 200));
+
+  // Header
+  const hg = ctx.createLinearGradient(0, 0, CW, 50);
+  hg.addColorStop(0, '#f39c12');
+  hg.addColorStop(1, '#e67e22');
+  ctx.fillStyle = hg;
+  ctx.fillRect(0, 0, CW, 50);
+
+  ctx.save();
+  ctx.font = 'bold 20px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(opts.icon + '  ' + opts.title, 16, 25);
+  ctx.restore();
+
+  // Rows
+  const medals: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+  for (let i = 0; i < opts.entries.length; i++) {
+    const e = opts.entries[i];
+    const ry = 50 + i * 48;
+    const isEven = i % 2 === 0;
+
+    // Row BG
+    ctx.save();
+    clipRoundRect(ctx, 8, ry + 4, CW - 16, 40, 6);
+    ctx.fillStyle = isEven ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)';
+    ctx.fill();
+    ctx.restore();
+
+    // Top-3 highlight
+    if (e.rank <= 3) {
+      const gold = ['rgba(243,156,18,0.15)', 'rgba(189,195,199,0.12)', 'rgba(205,127,50,0.12)'];
+      ctx.save();
+      clipRoundRect(ctx, 8, ry + 4, CW - 16, 40, 6);
+      ctx.fillStyle = gold[e.rank - 1];
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Avatar mini circle
+    if (e.avatarUrl) {
+      try {
+        const buf = await fetchBuf(e.avatarUrl.replace('.webp','.png').split('?')[0] + '?size=64');
+        const img = await loadImage(buf);
+        const cx = 34, cy = ry + 24;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, 16, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(img, cx - 16, cy - 16, 32, 32);
+        ctx.restore();
+      } catch { /* skip */ }
+    }
+
+    // Rank medal / number
+    ctx.save();
+    ctx.font = '18px sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText(medals[e.rank] || `#${e.rank}`, 58, ry + 24);
+    ctx.restore();
+
+    // Username
+    ctx.save();
+    ctx.font = e.rank <= 3 ? 'bold 14px sans-serif' : '14px sans-serif';
+    ctx.fillStyle = e.rank <= 3 ? '#ffffff' : 'rgba(255,255,255,0.85)';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText(e.username, 100, ry + 24);
+    ctx.restore();
+
+    // Value (right)
+    ctx.save();
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillStyle = e.rank === 1 ? '#f39c12' : e.rank === 2 ? '#bdc3c7' : e.rank === 3 ? '#cd7f32' : 'rgba(255,255,255,0.6)';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'right';
+    ctx.fillText(e.value, CW - 18, ry + 24);
+    ctx.restore();
+  }
+
+  return canvas.toBuffer('image/png') as unknown as Buffer;
+}
+
+// ─────────────────────────────────────────────────────────────
+// SERVER STATS CARD  (640 × 240)
+// ─────────────────────────────────────────────────────────────
+export async function createServerStatsCard(opts: {
+  guildName: string;
+  guildIconUrl?: string;
+  memberCount: number;
+  humanCount: number;
+  onlineCount: number;
+  voiceCount: number;
+  totalMessages: number;
+  totalVoiceHours: number;
+  totalCoins: number;
+  totalAchievements: number;
+  topChatter?: string;
+  topVoice?: string;
+}): Promise<Buffer> {
+  const CW = 640, CH = 240;
+  const canvas = createCanvas(CW, CH);
+  const ctx = canvas.getContext('2d');
+
+  // BG
+  const bg = ctx.createLinearGradient(0, 0, CW, CH);
+  bg.addColorStop(0, '#0a0a18');
+  bg.addColorStop(1, '#0f1628');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Header band
+  ctx.fillStyle = '#5865F2';
+  ctx.fillRect(0, 0, CW, 4);
+
+  // Guild icon
+  if (opts.guildIconUrl) {
+    try {
+      const buf = await fetchBuf(opts.guildIconUrl.split('?')[0] + '?size=128');
+      const img = await loadImage(buf);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(42, 42, 30, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(img, 12, 12, 60, 60);
+      ctx.restore();
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(42, 42, 31, 0, Math.PI * 2);
+      ctx.strokeStyle = '#5865F2';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    } catch { /* skip */ }
+  }
+
+  // Guild name
+  ctx.save();
+  ctx.font = 'bold 22px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'top';
+  ctx.fillText(opts.guildName.substring(0, 30), 84, 16);
+  ctx.restore();
+
+  ctx.save();
+  ctx.font = '13px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.textBaseline = 'top';
+  ctx.fillText('Sunucu İstatistikleri', 84, 44);
+  ctx.restore();
+
+  // Stat grid  (3 x 2)
+  const stats = [
+    { label: '👥 Üyeler',      value: `${opts.memberCount} (${opts.humanCount} insan)` },
+    { label: '🟢 Çevrimiçi',   value: `${opts.onlineCount} aktif` },
+    { label: '🎤 Seste',       value: `${opts.voiceCount} kişi` },
+    { label: '💬 Mesajlar',    value: opts.totalMessages.toLocaleString('tr-TR') },
+    { label: '⏱️ Ses Süresi',  value: opts.totalVoiceHours.toFixed(1) + ' sa.' },
+    { label: '🪙 Toplam Coin', value: opts.totalCoins.toLocaleString('tr-TR') },
+  ];
+
+  const colW = CW / 3, rowH = 56, startY = 86;
+  stats.forEach((s, i) => {
+    const col = i % 3, row = Math.floor(i / 3);
+    const sx = col * colW + 12, sy = startY + row * rowH;
+
+    ctx.save();
+    clipRoundRect(ctx, sx, sy, colW - 20, rowH - 8, 7);
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.textBaseline = 'top';
+    ctx.fillText(s.label, sx + 10, sy + 8);
+    ctx.restore();
+
+    ctx.save();
+    ctx.font = 'bold 15px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textBaseline = 'top';
+    ctx.fillText(s.value, sx + 10, sy + 26);
+    ctx.restore();
+  });
+
+  // Top users strip at bottom
+  if (opts.topChatter || opts.topVoice) {
+    ctx.save();
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.textBaseline = 'bottom';
+    const parts: string[] = [];
+    if (opts.topChatter) parts.push('🗣️ En çok konuşan: ' + opts.topChatter);
+    if (opts.topVoice)   parts.push('🎧 En çok seste: ' + opts.topVoice);
+    ctx.fillText(parts.join('   •   '), 12, CH - 10);
+    ctx.restore();
+  }
+
+  return canvas.toBuffer('image/png') as unknown as Buffer;
+}
+
+// ─────────────────────────────────────────────────────────────
+// DAILY REWARD CARD  (480 × 160)
+// ─────────────────────────────────────────────────────────────
+export async function createDailyRewardCard(opts: {
+  avatarUrl: string;
+  username: string;
+  coins: number;
+  streak: number;
+  currencyName: string;
+  milestoneBonus?: number;
+  milestoneTitle?: string;
+}): Promise<Buffer> {
+  const CW = 480, CH = 160;
+  const canvas = createCanvas(CW, CH);
+  const ctx = canvas.getContext('2d');
+
+  // BG
+  const bg = ctx.createLinearGradient(0, 0, CW, CH);
+  bg.addColorStop(0, '#0a1a0a');
+  bg.addColorStop(1, '#0d1f0d');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Green top bar
+  const tb = ctx.createLinearGradient(0, 0, CW, 0);
+  tb.addColorStop(0, '#27ae60');
+  tb.addColorStop(1, '#2ecc71');
+  ctx.fillStyle = tb;
+  ctx.fillRect(0, 0, CW, 3);
+
+  // Coin emoji
+  ctx.save();
+  ctx.font = '64px sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.fillText('💰', 16, 18);
+  ctx.restore();
+
+  // Avatar
+  const AVS = 56, AVX = CW - 76, AVY = (CH - AVS) / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(AVX + AVS / 2, AVY + AVS / 2, AVS / 2, 0, Math.PI * 2);
+  ctx.clip();
+  try {
+    const buf = await fetchBuf(opts.avatarUrl.replace('.webp','.png').split('?')[0] + '?size=64');
+    const img = await loadImage(buf);
+    ctx.drawImage(img, AVX, AVY, AVS, AVS);
+  } catch {
+    ctx.fillStyle = '#1e1e3a';
+    ctx.fillRect(AVX, AVY, AVS, AVS);
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(AVX + AVS / 2, AVY + AVS / 2, AVS / 2 + 2, 0, Math.PI * 2);
+  ctx.strokeStyle = '#27ae60';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.restore();
+
+  const TX = 94;
+
+  // Title
+  ctx.save();
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillStyle = '#2ecc71';
+  ctx.textBaseline = 'top';
+  ctx.fillText('Günlük Ödül Toplandı!', TX, 18);
+  ctx.restore();
+
+  // Coin amount
+  ctx.save();
+  ctx.font = 'bold 30px sans-serif';
+  ctx.fillStyle = '#f39c12';
+  ctx.textBaseline = 'top';
+  ctx.fillText('+' + opts.coins.toLocaleString('tr-TR') + ' ' + opts.currencyName, TX, 42);
+  ctx.restore();
+
+  // Streak
+  ctx.save();
+  ctx.font = '14px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.textBaseline = 'top';
+  ctx.fillText(`🔥 ${opts.streak} Günlük Seri${opts.milestoneTitle ? '  •  🎉 ' + opts.milestoneTitle : ''}`, TX, 84);
+  ctx.restore();
+
+  // Username
+  ctx.save();
+  ctx.font = '11px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(opts.username + '  •  Yarın tekrar gel!', TX, CH - 12);
+  ctx.restore();
+
+  return canvas.toBuffer('image/png') as unknown as Buffer;
+}
+
+// ─────────────────────────────────────────────────────────────
+// PROFILE CARD  (700 × 260)
+// ─────────────────────────────────────────────────────────────
+export async function createProfileCard(opts: {
+  avatarUrl: string;
+  username: string;
+  title: string;
+  bio: string;
+  level: number;
+  xp: number;
+  xpNeeded: number;
+  coins: number;
+  streak: number;
+  rank: number;
+  messageCount: number;
+  badges: string[];
+}): Promise<Buffer> {
+  const CW = 700, CH = 260;
+  const canvas = createCanvas(CW, CH);
+  const ctx = canvas.getContext('2d');
+
+  // BG
+  const bg = ctx.createLinearGradient(0, 0, CW, CH);
+  bg.addColorStop(0, '#0a0a18');
+  bg.addColorStop(0.6, '#12122a');
+  bg.addColorStop(1, '#0a0a18');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Grid dots
+  ctx.fillStyle = 'rgba(255,255,255,0.02)';
+  for (let gx = 0; gx < CW; gx += 22)
+    for (let gy = 0; gy < CH; gy += 22)
+      ctx.fillRect(gx, gy, 1.5, 1.5);
+
+  const accentColor = opts.level >= 30 ? '#f39c12' : opts.level >= 20 ? '#e74c3c' : opts.level >= 10 ? '#9b59b6' : '#5865F2';
+
+  // Left accent bar
+  ctx.fillStyle = accentColor;
+  ctx.fillRect(0, 0, 4, CH);
+
+  // Avatar (circle)
+  const AVS = 100, AVX = 28, AVY = (CH - AVS) / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(AVX + AVS / 2, AVY + AVS / 2, AVS / 2, 0, Math.PI * 2);
+  ctx.clip();
+  try {
+    const buf = await fetchBuf(opts.avatarUrl.replace('.webp', '.png').split('?')[0] + '?size=256');
+    const img = await loadImage(buf);
+    ctx.drawImage(img, AVX, AVY, AVS, AVS);
+  } catch {
+    ctx.fillStyle = '#1e1e3a';
+    ctx.fillRect(AVX, AVY, AVS, AVS);
+  }
+  ctx.restore();
+
+  // Avatar ring
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(AVX + AVS / 2, AVY + AVS / 2, AVS / 2 + 3, 0, Math.PI * 2);
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+  ctx.restore();
+
+  // Level badge
+  const badgeX = AVX + AVS - 12, badgeY = AVY + AVS - 12;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(badgeX, badgeY, 14, 0, Math.PI * 2);
+  ctx.fillStyle = accentColor;
+  ctx.fill();
+  ctx.font = 'bold 11px sans-serif';
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(opts.level), badgeX, badgeY);
+  ctx.restore();
+
+  const TX = AVX + AVS + 22;
+
+  // Username
+  ctx.save();
+  ctx.font = 'bold 22px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.fillText(opts.username, TX, 22);
+  ctx.restore();
+
+  // Title
+  ctx.save();
+  ctx.font = '13px sans-serif';
+  ctx.fillStyle = accentColor;
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.fillText(opts.title, TX, 50);
+  ctx.restore();
+
+  // Bio
+  ctx.save();
+  ctx.font = '12px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.fillText(opts.bio.substring(0, 55), TX, 70);
+  ctx.restore();
+
+  // Badges row
+  if (opts.badges.length > 0) {
+    ctx.save();
+    ctx.font = '18px sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText(opts.badges.slice(0, 8).join(' '), TX, 90);
+    ctx.restore();
+  }
+
+  // Stat pills
+  const pills = [
+    { label: '#' + opts.rank,                          sub: 'Sıra',   icon: '🏅' },
+    { label: opts.coins.toLocaleString('tr-TR'),       sub: 'Coin',   icon: '💰' },
+    { label: opts.streak + ' Gün',                     sub: 'Streak', icon: '🔥' },
+    { label: opts.messageCount.toLocaleString('tr-TR'), sub: 'Mesaj', icon: '💬' },
+  ];
+  const pillW = 115, pillH = 44, pillY = 120, pillGap = 10;
+  pills.forEach((p, i) => {
+    const px = TX + i * (pillW + pillGap);
+    ctx.save();
+    clipRoundRect(ctx, px, pillY, pillW, pillH, 8);
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(p.icon + ' ' + p.sub, px + 8, pillY + 6);
+    ctx.restore();
+
+    ctx.save();
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(p.label, px + 8, pillY + 22);
+    ctx.restore();
+  });
+
+  // XP progress bar
+  const bX = TX, bY = CH - 38, bW = CW - TX - 20, bH = 12, bR = 6;
+  ctx.save();
+  clipRoundRect(ctx, bX, bY, bW, bH, bR);
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.fill();
+  ctx.restore();
+
+  const xpRatio = Math.min(opts.xp / opts.xpNeeded, 1);
+  const xpFillW = Math.max(bR * 2, bW * xpRatio);
+  const xpGrad = ctx.createLinearGradient(bX, 0, bX + bW, 0);
+  xpGrad.addColorStop(0, accentColor);
+  xpGrad.addColorStop(1, '#7289da');
+  ctx.save();
+  clipRoundRect(ctx, bX, bY, xpFillW, bH, bR);
+  ctx.fillStyle = xpGrad;
+  ctx.fill();
+  ctx.restore();
+
+  // XP label
+  ctx.save();
+  ctx.font = '11px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(`${opts.xp.toLocaleString('tr-TR')} / ${opts.xpNeeded.toLocaleString('tr-TR')} XP`, bX + bW, bY - 4);
   ctx.restore();
 
   return canvas.toBuffer('image/png') as unknown as Buffer;
