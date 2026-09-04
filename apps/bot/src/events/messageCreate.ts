@@ -1,12 +1,16 @@
 import { Message, TextChannel } from 'discord.js';
 import { autoModService } from '../services/automod.service';
 import { xpService } from '../services/xp.service';
+import { messageCacheService } from '../services/messageCache.service';
 
 // Kullanıcının belirttiği fotoğraf kanalı ID'si
 export const PHOTO_CHANNEL_ID = '1543271245779566703';
 
 export async function onMessageCreate(message: Message) {
   if (!message.guild || message.author.bot) return;
+
+  // Mesajı silinme ve düzenlenme logları için önbelleğe al
+  messageCacheService.set(message);
 
   // 1. Fotoğraf Kanalı Otomatik Kalp Reaksiyonu (1543271245779566703)
   if (message.channelId === PHOTO_CHANNEL_ID) {

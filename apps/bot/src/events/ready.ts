@@ -62,6 +62,15 @@ export async function onReady(client: Client) {
     } catch {
       /* sessiz */
     }
+
+    // Sunucu üyelerini, rollerini ve kanallarını önbelleğe al (Önbellek eksikliği sorununu çözer)
+    try {
+      await guild.members.fetch().catch(() => null);
+      await guild.roles.fetch().catch(() => null);
+      await guild.channels.fetch().catch(() => null);
+    } catch {
+      /* sessiz */
+    }
   }
 
   // 2. Bot yeniden başladığında asılı kalan boş geçici ses odalarını temizle
