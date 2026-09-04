@@ -259,6 +259,79 @@ export async function handleButtonInteraction(interaction: ButtonInteraction) {
     return;
   }
 
+  // -0.5. PANEL ROL (SELF-ROLE) BUTONLARI (Etkinlikçi vb.)
+  if (customId.startsWith('self_role_')) {
+    const roleId = customId.replace('self_role_', '');
+    const member = (interaction.member as GuildMember) || (await guild.members.fetch(user.id).catch(() => null));
+
+    if (!member) {
+      await interaction.reply({ content: '❌ Kullanıcı bilgisi alınamadı!', ephemeral: true });
+      return;
+    }
+
+    // Güvenlik: Korumalı özel roller panelden alınamaz
+    const PROTECTED_ROLES = ['1543033008318316654', '1543392872504762498'];
+    if (PROTECTED_ROLES.includes(roleId)) {
+      await interaction.reply({
+        content: '❌ Bu özel rol panel üzerinden alınamaz veya bırakılamaz!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const role = guild.roles.cache.get(roleId) || (await guild.roles.fetch(roleId).catch(() => null));
+    if (!role) {
+      await interaction.reply({
+        content: '❌ Belirtilen rol sunucuda bulunamadı veya silinmiş!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    if (role.permissions.has(PermissionFlagsBits.Administrator)) {
+      await interaction.reply({
+        content: '❌ Yönetici yetkisine sahip roller güvenlik nedeniyle panelden alınamaz!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const botMember = guild.members.me;
+    if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageRoles) || botMember.roles.highest.position <= role.position) {
+      await interaction.reply({
+        content: `❌ Botun rol yetkisi **${role.name}** rolünü yönetmek için yetersiz! Lütfen botun rolünü roller sıralamasında bu rolün üzerine taşıyın.`,
+        ephemeral: true,
+      });
+      return;
+    }
+
+    try {
+      if (member.roles.cache.has(role.id)) {
+        await member.roles.remove(role.id);
+        const embed = createEmbed({
+          title: '🗑️ Rol Kaldırıldı',
+          description: `<@&${role.id}> (**${role.name}**) rolü üzerinizden başarıyla alındı. İstediğiniz zaman tekrar butona basarak alabilirsiniz.`,
+          color: DEFAULT_COLORS.WARNING,
+        });
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+      } else {
+        await member.roles.add(role.id);
+        const embed = createEmbed({
+          title: '✅ Rol Eklendi',
+          description: `<@&${role.id}> (**${role.name}**) rolü üzerinize başarıyla verildi! Artık bildirimlerden anında haberdar olacaksınız.`,
+          color: DEFAULT_COLORS.SUCCESS,
+        });
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+      }
+    } catch (err: any) {
+      await interaction.reply({
+        content: `❌ Rol işlemi sırasında bir hata oluştu: ${err.message}`,
+        ephemeral: true,
+      });
+    }
+    return;
+  }
+
   // 0. SHIP BUTONLARI
   if (customId.startsWith('ship_retry_') || customId.startsWith('ship_swap_')) {
     await interaction.deferReply();

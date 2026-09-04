@@ -34,6 +34,7 @@ import { anketCommand } from './commands/utility/anket';
 import { dogumgunuCommand } from './commands/utility/dogumgunu';
 import { hatirlatCommand } from './commands/utility/hatirlat';
 import { sayCommand } from './commands/utility/say';
+import { rolPanelCommand } from './commands/utility/rolPanel';
 
 // Ses Komutları
 import { voiceCommand } from './commands/voice/voice';
@@ -105,6 +106,7 @@ const allCommands: SlashCommand[] = [
   dogumgunuCommand,
   hatirlatCommand,
   sayCommand,
+  rolPanelCommand,
   voiceCommand,
   gitCommand,
   cekCommand,
