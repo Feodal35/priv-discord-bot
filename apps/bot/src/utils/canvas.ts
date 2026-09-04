@@ -44,6 +44,90 @@ function heartPath(ctx: SKRSContext2D, cx: number, cy: number, s: number) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// VECTOR ICONS (Font bağımsız, her platformda kusursuz çalışan ikonlar)
+// ─────────────────────────────────────────────────────────────
+
+function drawTrophyIcon(ctx: SKRSContext2D, cx: number, cy: number, size: number) {
+  ctx.save();
+  ctx.fillStyle = '#f39c12';
+  ctx.beginPath();
+  ctx.moveTo(cx - size * 0.4, cy - size * 0.4);
+  ctx.lineTo(cx + size * 0.4, cy - size * 0.4);
+  ctx.lineTo(cx + size * 0.3, cy + size * 0.05);
+  ctx.quadraticCurveTo(cx, cy + size * 0.25, cx - size * 0.3, cy + size * 0.05);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillRect(cx - size * 0.08, cy + size * 0.12, size * 0.16, size * 0.2);
+  ctx.fillRect(cx - size * 0.28, cy + size * 0.28, size * 0.56, size * 0.1);
+  ctx.restore();
+}
+
+function drawCoinIcon(ctx: SKRSContext2D, cx: number, cy: number, radius: number) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  const grad = ctx.createLinearGradient(cx - radius, cy - radius, cx + radius, cy + radius);
+  grad.addColorStop(0, '#f39c12');
+  grad.addColorStop(1, '#f1c40f');
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius * 0.72, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.font = `bold ${Math.round(radius * 1.1)}px sans-serif`;
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('¢', cx, cy + 1);
+  ctx.restore();
+}
+
+function drawFlameIcon(ctx: SKRSContext2D, cx: number, cy: number, size: number) {
+  ctx.save();
+  const grad = ctx.createLinearGradient(cx, cy + size * 0.5, cx, cy - size * 0.5);
+  grad.addColorStop(0, '#e74c3c');
+  grad.addColorStop(0.5, '#e67e22');
+  grad.addColorStop(1, '#f1c40f');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - size * 0.5);
+  ctx.bezierCurveTo(cx + size * 0.38, cy - size * 0.2, cx + size * 0.48, cy + size * 0.2, cx + size * 0.28, cy + size * 0.45);
+  ctx.quadraticCurveTo(cx, cy + size * 0.58, cx - size * 0.28, cy + size * 0.45);
+  ctx.bezierCurveTo(cx - size * 0.48, cy + size * 0.2, cx - size * 0.28, cy - size * 0.2, cx, cy - size * 0.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#fff3cd';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - size * 0.05);
+  ctx.bezierCurveTo(cx + size * 0.15, cy + size * 0.1, cx + size * 0.18, cy + size * 0.3, cx, cy + size * 0.42);
+  ctx.bezierCurveTo(cx - size * 0.18, cy + size * 0.3, cx - size * 0.15, cy + size * 0.1, cx, cy - size * 0.05);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawChatIcon(ctx: SKRSContext2D, cx: number, cy: number, size: number) {
+  ctx.save();
+  ctx.fillStyle = '#3498db';
+  clipRoundRect(ctx, cx - size * 0.45, cy - size * 0.38, size * 0.9, size * 0.6, 4);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx - size * 0.18, cy + size * 0.18);
+  ctx.lineTo(cx - size * 0.32, cy + size * 0.42);
+  ctx.lineTo(cx + size * 0.05, cy + size * 0.18);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  for (let i = -1; i <= 1; i++) {
+    ctx.beginPath();
+    ctx.arc(cx + i * size * 0.2, cy - size * 0.08, size * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────────────────────
 // SHIP CARD
 // ─────────────────────────────────────────────────────────────
 export async function createShipImage(
@@ -417,18 +501,20 @@ export async function createBalanceCard(opts: {
     ctx.fillStyle = p.color;
     ctx.fillRect(px, panY, 3, panH);
 
+    drawCoinIcon(ctx, px + 16, panY + 14, 5);
+
     ctx.save();
-    ctx.font = '11px sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.textBaseline = 'top';
-    ctx.fillText(opts.currencyEmoji + ' ' + p.label, px + 10, panY + 8);
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(p.label, px + 26, panY + 14);
     ctx.restore();
 
     ctx.save();
     ctx.font = 'bold 16px sans-serif';
     ctx.fillStyle = p.color;
     ctx.textBaseline = 'top';
-    ctx.fillText(p.val.toLocaleString('tr-TR'), px + 10, panY + 28);
+    ctx.fillText(p.val.toLocaleString('tr-TR') + ' Coin', px + 10, panY + 28);
     ctx.restore();
   });
 
@@ -467,13 +553,8 @@ export async function createStreakCard(opts: {
   ctx.fillStyle = '#e67e22';
   ctx.fillRect(0, 0, CW, 3);
 
-  // Big flame emoji/text area
-  const flameX = 20, flameY = 15;
-  ctx.save();
-  ctx.font = '72px sans-serif';
-  ctx.textBaseline = 'top';
-  ctx.fillText('🔥', flameX, flameY);
-  ctx.restore();
+  // Big vector flame icon
+  drawFlameIcon(ctx, 58, 50, 70);
 
   const TX = 115;
 
@@ -581,11 +662,16 @@ export async function createLeaderboardCard(opts: {
   ctx.font = 'bold 20px sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'middle';
-  ctx.fillText(opts.icon + '  ' + opts.title, 16, 25);
+  ctx.fillText(opts.title, 16, 25);
   ctx.restore();
 
   // Rows
-  const medals: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+  const badgeColors: Record<number, { bg: string; text: string }> = {
+    1: { bg: '#f1c40f', text: '#000000' },
+    2: { bg: '#bdc3c7', text: '#000000' },
+    3: { bg: '#cd7f32', text: '#ffffff' },
+  };
+
   for (let i = 0; i < opts.entries.length; i++) {
     const e = opts.entries[i];
     const ry = 50 + i * 48;
@@ -623,13 +709,29 @@ export async function createLeaderboardCard(opts: {
       } catch { /* skip */ }
     }
 
-    // Rank medal / number
-    ctx.save();
-    ctx.font = '18px sans-serif';
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'left';
-    ctx.fillText(medals[e.rank] || `#${e.rank}`, 58, ry + 24);
-    ctx.restore();
+    // Rank badge (Vector)
+    const badge = badgeColors[e.rank];
+    if (badge) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(68, ry + 24, 12, 0, Math.PI * 2);
+      ctx.fillStyle = badge.bg;
+      ctx.fill();
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = badge.text;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(e.rank), 68, ry + 24);
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`#${e.rank}`, 68, ry + 24);
+      ctx.restore();
+    }
 
     // Username
     ctx.save();
@@ -723,12 +825,12 @@ export async function createServerStatsCard(opts: {
 
   // Stat grid  (3 x 2)
   const stats = [
-    { label: '👥 Üyeler',      value: `${opts.memberCount} (${opts.humanCount} insan)` },
-    { label: '🟢 Çevrimiçi',   value: `${opts.onlineCount} aktif` },
-    { label: '🎤 Seste',       value: `${opts.voiceCount} kişi` },
-    { label: '💬 Mesajlar',    value: opts.totalMessages.toLocaleString('tr-TR') },
-    { label: '⏱️ Ses Süresi',  value: opts.totalVoiceHours.toFixed(1) + ' sa.' },
-    { label: '🪙 Toplam Coin', value: opts.totalCoins.toLocaleString('tr-TR') },
+    { label: 'ÜYELER',      value: `${opts.memberCount} (${opts.humanCount} insan)`, color: '#3498db' },
+    { label: 'ÇEVRİMİÇİ',   value: `${opts.onlineCount} aktif`,                     color: '#2ecc71' },
+    { label: 'SESTE',       value: `${opts.voiceCount} kişi`,                       color: '#9b59b6' },
+    { label: 'MESAJLAR',    value: opts.totalMessages.toLocaleString('tr-TR'),      color: '#e67e22' },
+    { label: 'SES SÜRESİ',  value: opts.totalVoiceHours.toFixed(1) + ' sa.',        color: '#1abc9c' },
+    { label: 'TOPLAM COIN', value: opts.totalCoins.toLocaleString('tr-TR'),         color: '#f1c40f' },
   ];
 
   const colW = CW / 3, rowH = 56, startY = 86;
@@ -743,8 +845,8 @@ export async function createServerStatsCard(opts: {
     ctx.restore();
 
     ctx.save();
-    ctx.font = '11px sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = s.color;
     ctx.textBaseline = 'top';
     ctx.fillText(s.label, sx + 10, sy + 8);
     ctx.restore();
@@ -753,7 +855,7 @@ export async function createServerStatsCard(opts: {
     ctx.font = 'bold 15px sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.textBaseline = 'top';
-    ctx.fillText(s.value, sx + 10, sy + 26);
+    ctx.fillText(s.value, sx + 10, sy + 25);
     ctx.restore();
   });
 
@@ -761,11 +863,11 @@ export async function createServerStatsCard(opts: {
   if (opts.topChatter || opts.topVoice) {
     ctx.save();
     ctx.font = '11px sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.textBaseline = 'bottom';
     const parts: string[] = [];
-    if (opts.topChatter) parts.push('🗣️ En çok konuşan: ' + opts.topChatter);
-    if (opts.topVoice)   parts.push('🎧 En çok seste: ' + opts.topVoice);
+    if (opts.topChatter) parts.push('En Çok Konuşan: ' + opts.topChatter);
+    if (opts.topVoice)   parts.push('En Çok Seste: ' + opts.topVoice);
     ctx.fillText(parts.join('   •   '), 12, CH - 10);
     ctx.restore();
   }
@@ -803,12 +905,8 @@ export async function createDailyRewardCard(opts: {
   ctx.fillStyle = tb;
   ctx.fillRect(0, 0, CW, 3);
 
-  // Coin emoji
-  ctx.save();
-  ctx.font = '64px sans-serif';
-  ctx.textBaseline = 'top';
-  ctx.fillText('💰', 16, 18);
-  ctx.restore();
+  // Vector Coin Icon
+  drawCoinIcon(ctx, 48, 55, 25);
 
   // Avatar
   const AVS = 56, AVX = CW - 76, AVY = (CH - AVS) / 2;
@@ -990,14 +1088,14 @@ export async function createProfileCard(opts: {
     ctx.restore();
   }
 
-  // Stat pills
+  // Stat pills with crisp vector icons
   const pills = [
-    { label: '#' + opts.rank,                          sub: 'Sıra',   icon: '🏅' },
-    { label: opts.coins.toLocaleString('tr-TR'),       sub: 'Coin',   icon: '💰' },
-    { label: opts.streak + ' Gün',                     sub: 'Streak', icon: '🔥' },
-    { label: opts.messageCount.toLocaleString('tr-TR'), sub: 'Mesaj', icon: '💬' },
+    { label: '#' + opts.rank,                          sub: 'SIRA',   type: 'trophy', color: '#f39c12' },
+    { label: opts.coins.toLocaleString('tr-TR'),       sub: 'COIN',   type: 'coin',   color: '#f1c40f' },
+    { label: opts.streak + ' Gün',                     sub: 'STREAK', type: 'flame',  color: '#e67e22' },
+    { label: opts.messageCount.toLocaleString('tr-TR'), sub: 'MESAJ',  type: 'chat',   color: '#3498db' },
   ];
-  const pillW = 115, pillH = 44, pillY = 120, pillGap = 10;
+  const pillW = 115, pillH = 46, pillY = 120, pillGap = 10;
   pills.forEach((p, i) => {
     const px = TX + i * (pillW + pillGap);
     ctx.save();
@@ -1006,20 +1104,30 @@ export async function createProfileCard(opts: {
     ctx.fill();
     ctx.restore();
 
+    // Vektörel ikon çizimi
+    const iconX = px + 14;
+    const iconY = pillY + 13;
+    if (p.type === 'trophy') drawTrophyIcon(ctx, iconX, iconY, 14);
+    else if (p.type === 'coin') drawCoinIcon(ctx, iconX, iconY, 6);
+    else if (p.type === 'flame') drawFlameIcon(ctx, iconX, iconY, 14);
+    else if (p.type === 'chat') drawChatIcon(ctx, iconX, iconY, 13);
+
+    // Kategori etiketi
     ctx.save();
-    ctx.font = '11px sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = p.color;
     ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(p.icon + ' ' + p.sub, px + 8, pillY + 6);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(p.sub, px + 25, iconY);
     ctx.restore();
 
+    // Değer
     ctx.save();
     ctx.font = 'bold 14px sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText(p.label, px + 8, pillY + 22);
+    ctx.fillText(p.label, px + 10, pillY + 24);
     ctx.restore();
   });
 
@@ -1140,10 +1248,10 @@ export async function createWelcomeCard(opts: {
 
   // Subtitle / Welcome greeting tag
   ctx.save();
-  ctx.font = 'bold 14px sans-serif';
+  ctx.font = 'bold 13px sans-serif';
   ctx.fillStyle = '#ff6b9d';
   ctx.textBaseline = 'top';
-  ctx.fillText('✨ ARAMIZA BİRİ KATILDI', TX, 48);
+  ctx.fillText('ARAMIZA BİRİ KATILDI', TX, 48);
   ctx.restore();
 
   // Username
@@ -1184,7 +1292,7 @@ export async function createWelcomeCard(opts: {
   ctx.font = 'bold 14px sans-serif';
   ctx.fillStyle = '#2ecc71';
   ctx.textBaseline = 'middle';
-  ctx.fillText(`🎉 Seninle birlikte ${opts.memberCount} kişiyiz!`, TX + 16, pillY + pillH / 2);
+  ctx.fillText(`Seninle birlikte ${opts.memberCount} kişiyiz!`, TX + 16, pillY + pillH / 2);
   ctx.restore();
 
   return canvas.toBuffer('image/png') as unknown as Buffer;
