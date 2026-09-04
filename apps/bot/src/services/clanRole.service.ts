@@ -4,8 +4,10 @@ import { Guild, GuildMember, Client, PermissionFlagsBits, AuditLogEvent } from '
 import { logger } from '../utils/logger';
 import { logService } from './log.service';
 
-// Kullanıcının belirttiği klan / guild rolü ID'si
-export const CLAN_ROLE_ID = '1543033008318316654';
+// Kullanıcının belirttiği güncel klan / guild rolü ID'si
+export const CLAN_ROLE_ID = '1543392872504762498';
+// Önceki yanlış rol ID'si (artık temizlenir)
+export const OLD_CLAN_ROLE_ID = '1543033008318316654';
 
 // Kalıcı muafiyet dosyası yolu
 const EXEMPTIONS_FILE = path.join(process.cwd(), 'guild_exemptions.json');
@@ -173,6 +175,11 @@ export class ClanRoleService {
     const botMember = guild.members.me;
     if (!botMember?.permissions.has('ManageRoles') || botMember.roles.highest.position <= role.position) {
       return 'NONE';
+    }
+
+    // Eski yanlış rol (1543033008318316654) kalmışsa temizle
+    if (member.roles.cache.has(OLD_CLAN_ROLE_ID)) {
+      await member.roles.remove(OLD_CLAN_ROLE_ID).catch(() => {});
     }
 
     const hasRole = member.roles.cache.has(CLAN_ROLE_ID);

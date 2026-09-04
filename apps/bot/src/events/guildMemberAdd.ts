@@ -8,14 +8,14 @@ import { DEFAULT_COLORS } from '@priv/shared';
 import { createWelcomeCard } from '../utils/canvas';
 import { logger } from '../utils/logger';
 
-// Kullanıcının belirttiği otomatik verilecek kalıcı rol ID'si
-export const AUTO_ROLE_ID = '1543033008318316654';
+// Kullanıcının belirttiği güncel klan / guild rol ID'si
+export const AUTO_ROLE_ID = '1543392872504762498';
 
 export async function onGuildMemberAdd(member: GuildMember) {
   const guild = member.guild;
   const settings = await guildService.getGuildSettings(guild.id);
 
-  // 1. KLAN / GUILD ROLÜ DENETİMİ (1543033008318316654)
+  // 1. KLAN / GUILD ROLÜ DENETİMİ (1543392872504762498)
   try {
     await clanRoleService.checkAndSyncMember(member);
   } catch (error) {

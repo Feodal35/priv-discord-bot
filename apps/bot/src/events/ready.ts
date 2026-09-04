@@ -68,7 +68,7 @@ export async function onReady(client: Client) {
   // 5. Sabit ses kanalına otomatik 7/24 bağlan
   await connectToPersistentVoice(client);
 
-  // 6. Klan / Guild Rolü (1543033008318316654) Sıkı Denetimi:
+  // 6. Klan / Guild Rolü (1543392872504762498) Sıkı Denetimi:
   //    Klanı olmayan/salanlardan rolü geri alır, klanı olanlara rolü verir!
   clanRoleService.syncAllGuilds(client).catch((err) => {
     logger.error('Klan rolü senkronizasyon hatası:', err);
