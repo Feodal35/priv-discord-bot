@@ -50,6 +50,7 @@ import { acCommand } from './commands/moderation/ac';
 // Yönetici Komutları
 import { kurulumCommand } from './commands/admin/kurulum';
 import { ayarlarCommand } from './commands/admin/ayarlar';
+import { guildMuafiyetCommand } from './commands/admin/guildMuafiyet';
 
 // Eventler
 import { onReady } from './events/ready';
@@ -102,6 +103,7 @@ const allCommands: SlashCommand[] = [
   acCommand,
   kurulumCommand,
   ayarlarCommand,
+  guildMuafiyetCommand,
 ];
 
 for (const cmd of allCommands) {

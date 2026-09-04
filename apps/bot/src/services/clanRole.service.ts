@@ -1,30 +1,91 @@
-import { Guild, GuildMember, Client } from 'discord.js';
+import fs from 'fs';
+import path from 'path';
+import { Guild, GuildMember, Client, PermissionFlagsBits, AuditLogEvent } from 'discord.js';
 import { logger } from '../utils/logger';
 import { logService } from './log.service';
 
 // Kullanıcının belirttiği klan / guild rolü ID'si
 export const CLAN_ROLE_ID = '1543033008318316654';
 
+// Kalıcı muafiyet dosyası yolu
+const EXEMPTIONS_FILE = path.join(process.cwd(), 'guild_exemptions.json');
+
 export class ClanRoleService {
+  // Bellek içi muafiyet listesi (guildId:userId)
+  private exemptions = new Set<string>();
+
+  constructor() {
+    this.loadExemptions();
+  }
+
+  private loadExemptions() {
+    try {
+      if (fs.existsSync(EXEMPTIONS_FILE)) {
+        const data = JSON.parse(fs.readFileSync(EXEMPTIONS_FILE, 'utf-8'));
+        if (Array.isArray(data)) {
+          this.exemptions = new Set(data);
+        }
+      }
+    } catch (e) {
+      logger.error('[CLAN_ROLE] Muafiyet listesi yüklenemedi:', e);
+    }
+  }
+
+  private saveExemptions() {
+    try {
+      fs.writeFileSync(EXEMPTIONS_FILE, JSON.stringify(Array.from(this.exemptions), null, 2), 'utf-8');
+    } catch (e) {
+      logger.error('[CLAN_ROLE] Muafiyet listesi kaydedilemedi:', e);
+    }
+  }
+
+  public isExempt(guildId: string, userId: string): boolean {
+    return this.exemptions.has(`${guildId}:${userId}`);
+  }
+
+  public addExemption(guildId: string, userId: string): boolean {
+    const key = `${guildId}:${userId}`;
+    if (this.exemptions.has(key)) return false;
+    this.exemptions.add(key);
+    this.saveExemptions();
+    return true;
+  }
+
+  public removeExemption(guildId: string, userId: string): boolean {
+    const key = `${guildId}:${userId}`;
+    if (!this.exemptions.has(key)) return false;
+    this.exemptions.delete(key);
+    this.saveExemptions();
+    return true;
+  }
+
+  public getExemptions(guildId: string): string[] {
+    const list: string[] = [];
+    for (const item of this.exemptions) {
+      const [gId, uId] = item.split(':');
+      if (gId === guildId && uId) {
+        list.push(uId);
+      }
+    }
+    return list;
+  }
+
   /**
    * Bir kullanıcının bu sunucunun resmi Guild / Clan rozetine sahip olup olmadığını kontrol eder.
-   * Kullanıcı klandan çıkmışsa, rozeti kapatmışsa veya başka bir klandaysa false döner.
    */
   async hasGuildOrClan(member: GuildMember): Promise<boolean> {
     if (member.user.bot) return false;
 
     try {
-      // 1. Kullanıcının güncel Discord API profilini çek
       const freshUser = await member.user.fetch(true).catch(() => member.user);
       const userAny = freshUser as any;
       const memberAny = member as any;
       const guildAny = member.guild as any;
 
-      // Discord Primary Guild (Guilds / Clans) verisi
       const pg = userAny.primaryGuild || userAny.primary_guild;
       const clan = userAny.clan || memberAny.clan;
 
-      // A) primaryGuild kontrolü: Sunucu ID'si eşleşiyor mu ve rozet açık mı?
+      // primaryGuild kontrolü
       if (pg) {
         const idGuild = pg.identityGuildId || pg.identity_guild_id;
         const isEnabled = pg.identityEnabled !== false && pg.identity_enabled !== false;
@@ -33,7 +94,7 @@ export class ClanRoleService {
         }
       }
 
-      // B) clan objesi kontrolü
+      // clan objesi kontrolü
       if (clan) {
         const clanGuildId = clan.identityGuildId || clan.identity_guild_id;
         const isEnabled = clan.identityEnabled !== false && clan.identity_enabled !== false;
@@ -42,13 +103,12 @@ export class ClanRoleService {
         }
       }
 
-      // C) Sunucunun kendi klan tagı varsa ve kullanıcının klan tagı ile örtüşüyorsa
+      // Sunucu klan tagı kontrolü
       const serverClanTag = guildAny.clan?.tag;
       if (serverClanTag && (pg?.tag === serverClanTag || clan?.tag === serverClanTag)) {
         return true;
       }
 
-      // Kullanıcı klan almamış veya önceden alıp salmış
       return false;
     } catch (err) {
       logger.error(`[CLAN_ROLE] Üye kontrol edilirken hata (${member.id}):`, err);
@@ -57,9 +117,47 @@ export class ClanRoleService {
   }
 
   /**
+   * Rolün bir yetkili (insan) tarafından elle verilip verilmediğini Discord Denetim Kaydından inceler.
+   */
+  async wasRoleGivenManuallyByStaff(member: GuildMember): Promise<boolean> {
+    try {
+      const guild = member.guild;
+      const botMember = guild.members.me;
+      if (!botMember?.permissions.has(PermissionFlagsBits.ViewAuditLog)) {
+        return false;
+      }
+
+      const logs = await guild.fetchAuditLogs({
+        type: AuditLogEvent.MemberRoleUpdate,
+        limit: 10,
+      }).catch(() => null);
+
+      if (!logs) return false;
+
+      for (const entry of logs.entries.values()) {
+        if (entry.targetId === member.id && entry.executor && !entry.executor.bot) {
+          // Bu rolu eklemiş mi?
+          const addedRole = entry.changes.find(
+            (c) => c.key === '$add' && Array.isArray(c.new) && c.new.some((r: any) => r.id === CLAN_ROLE_ID)
+          );
+          if (addedRole) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Tek bir üye için rol durumunu denetler:
+   * - Muafiyet listesinde veya yetkili ise rol asla geri alınmaz.
+   * - Yetkili elle vermişse otomatik muafiyete alınır.
    * - Klanı varsa ve rol yoksa: ROL VERİR.
-   * - Klanı yoksa (salmışsa) ve rol varsa: ROLÜ GERİ ALIR.
+   * - Klanı yoksa ve rol varsa: ROLÜ GERİ ALIR.
    */
   async checkAndSyncMember(member: GuildMember): Promise<'ADDED' | 'REMOVED' | 'NONE'> {
     if (member.user.bot) return 'NONE';
@@ -70,22 +168,33 @@ export class ClanRoleService {
       role = (await guild.roles.fetch(CLAN_ROLE_ID).catch(() => null)) || undefined;
     }
 
-    if (!role) {
-      logger.warn(`⚠️ [CLAN_ROLE] Hedef rol bulunamadı: ${CLAN_ROLE_ID}`);
-      return 'NONE';
-    }
+    if (!role) return 'NONE';
 
     const botMember = guild.members.me;
     if (!botMember?.permissions.has('ManageRoles') || botMember.roles.highest.position <= role.position) {
-      logger.warn(`⚠️ [CLAN_ROLE] Botun rol verme/alma yetkisi yetersiz! Bot rolü ${role.name} rolünün üstünde olmalıdır.`);
       return 'NONE';
     }
 
-    const hasClan = await this.hasGuildOrClan(member);
     const hasRole = member.roles.cache.has(CLAN_ROLE_ID);
+    const hasClan = await this.hasGuildOrClan(member);
 
+    // 1. Muafiyet Kontrolleri:
+    // A) Manuel muafiyet listesinde mi?
+    if (this.isExempt(guild.id, member.id)) {
+      if (!hasRole) {
+        await member.roles.add(role).catch(() => {});
+        return 'ADDED';
+      }
+      return 'NONE'; // Elle muaf tutulmuş, rolü geri alınamaz!
+    }
+
+    // B) Sunucu Sahibi veya Yönetici mi?
+    if (member.id === guild.ownerId || member.permissions.has(PermissionFlagsBits.Administrator)) {
+      if (hasRole) return 'NONE'; // Yöneticilerin rolüne asla dokunma
+    }
+
+    // 2. Eğer klanı var ama rolü yoksa -> Rolü ver
     if (hasClan && !hasRole) {
-      // Klanı var ama rolü yok -> Rolü ver
       await member.roles.add(role).catch((err) => {
         logger.error(`[CLAN_ROLE] Rol eklenemedi (${member.user.tag}):`, err);
       });
@@ -98,8 +207,20 @@ export class ClanRoleService {
         member.client
       ).catch(() => {});
       return 'ADDED';
-    } else if (!hasClan && hasRole) {
-      // Klanı yok ama rolü var (önceden alıp salmış) -> Rolü geri al!
+    }
+
+    // 3. Eğer klanı yok ama rolü varsa:
+    if (!hasClan && hasRole) {
+      // Önce Denetim Kaydına bak: Bir yetkili mi verdi?
+      const manualByStaff = await this.wasRoleGivenManuallyByStaff(member);
+      if (manualByStaff) {
+        // Yetkili elle vermiş! Otomatik muafiyete ekle ve rolü koru!
+        this.addExemption(guild.id, member.id);
+        logger.info(`🛡️ [CLAN_ROLE] ${member.user.tag} yetkili tarafından elle rol verildiği için muafiyete alındı (Rol silinmedi).`);
+        return 'NONE';
+      }
+
+      // Normal kullanıcı salmış/bırakmış -> Rolü geri al!
       await member.roles.remove(role).catch((err) => {
         logger.error(`[CLAN_ROLE] Rol kaldırılamadı (${member.user.tag}):`, err);
       });
@@ -118,27 +239,18 @@ export class ClanRoleService {
   }
 
   /**
-   * Sunucudaki TÜM üyeleri baştan sona tarar:
-   * Klanı olmayan herkesten rolü geri alır, klanı olanlara rolü verir.
+   * Sunucudaki TÜM üyeleri baştan sona tarar.
    */
   async syncAllMembers(guild: Guild): Promise<{ added: number; removed: number; total: number }> {
-    logger.info(`🔍 [CLAN_ROLE] ${guild.name} sunucusu için tüm üyelerin klan/guild durumu taranıyor...`);
+    logger.info(`🔍 [CLAN_ROLE] ${guild.name} klan/guild denetimi yapılıyor...`);
 
     let role = guild.roles.cache.get(CLAN_ROLE_ID);
     if (!role) {
       role = (await guild.roles.fetch(CLAN_ROLE_ID).catch(() => null)) || undefined;
     }
+    if (!role) return { added: 0, removed: 0, total: 0 };
 
-    if (!role) {
-      logger.warn(`⚠️ [CLAN_ROLE] Hedef rol sunucuda bulunamadı: ${CLAN_ROLE_ID}`);
-      return { added: 0, removed: 0, total: 0 };
-    }
-
-    const members = await guild.members.fetch().catch((err) => {
-      logger.error('[CLAN_ROLE] Üyeler fetch edilirken hata:', err);
-      return null;
-    });
-
+    const members = await guild.members.fetch().catch(() => null);
     if (!members) return { added: 0, removed: 0, total: 0 };
 
     let added = 0;
@@ -146,19 +258,15 @@ export class ClanRoleService {
 
     for (const [, member] of members) {
       if (member.user.bot) continue;
-
       const result = await this.checkAndSyncMember(member);
       if (result === 'ADDED') added++;
       if (result === 'REMOVED') removed++;
     }
 
-    logger.info(`🏁 [CLAN_ROLE] ${guild.name} taraması tamamlandı: ${removed} üyeden rol geri alındı, ${added} üyeye rol verildi.`);
+    logger.info(`🏁 [CLAN_ROLE] ${guild.name} denetimi bitti: ${removed} üyeden rol alındı, ${added} üyeye verildi.`);
     return { added, removed, total: members.size };
   }
 
-  /**
-   * Botun bağlı olduğu tüm sunucularda tarama başlatır.
-   */
   async syncAllGuilds(client: Client) {
     for (const [, guild] of client.guilds.cache) {
       await this.syncAllMembers(guild).catch(() => {});
