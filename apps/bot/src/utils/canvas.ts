@@ -127,6 +127,35 @@ function drawChatIcon(ctx: SKRSContext2D, cx: number, cy: number, size: number) 
   ctx.restore();
 }
 
+/**
+ * Canvas metinlerinde Linux sunucusunda kare (▯ / tofu) çıkmasını önlemek için
+ * kullanıcı adı, sunucu adı ve başlıklardaki emojileri temizler.
+ */
+export function removeEmojis(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F1E6}-\u{1F1FF}]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function drawAnalyticsIcon(ctx: SKRSContext2D, cx: number, cy: number, size: number) {
+  ctx.save();
+  const barW = size * 0.22;
+  const gap = size * 0.08;
+  const startX = cx - size * 0.45;
+  // Bar 1
+  ctx.fillStyle = '#5865F2';
+  ctx.fillRect(startX, cy + size * 0.05, barW, size * 0.4);
+  // Bar 2
+  ctx.fillStyle = '#a259ff';
+  ctx.fillRect(startX + barW + gap, cy - size * 0.35, barW, size * 0.8);
+  // Bar 3
+  ctx.fillStyle = '#2ecc71';
+  ctx.fillRect(startX + (barW + gap) * 2, cy - size * 0.15, barW, size * 0.6);
+  ctx.restore();
+}
+
 // ─────────────────────────────────────────────────────────────
 // SHIP CARD
 // ─────────────────────────────────────────────────────────────
@@ -1255,13 +1284,17 @@ export async function createWelcomeCard(opts: {
   ctx.restore();
 
   // Username
+  // Username
+  const cleanUsername = removeEmojis(opts.username) || 'Üye';
+  const cleanGuildName = removeEmojis(opts.guildName) || 'Sunucu';
+
   ctx.save();
   ctx.font = 'bold 32px sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'top';
   ctx.shadowColor = 'rgba(0,0,0,0.8)';
   ctx.shadowBlur = 10;
-  const displayUser = opts.username.length > 20 ? opts.username.substring(0, 18) + '...' : opts.username;
+  const displayUser = cleanUsername.length > 20 ? cleanUsername.substring(0, 18) + '...' : cleanUsername;
   ctx.fillText(displayUser, TX, 74);
   ctx.restore();
 
@@ -1270,7 +1303,7 @@ export async function createWelcomeCard(opts: {
   ctx.font = '16px sans-serif';
   ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
   ctx.textBaseline = 'top';
-  ctx.fillText(`${opts.guildName} sunucusuna hoş geldin!`, TX, 120);
+  ctx.fillText(`${cleanGuildName} sunucusuna hoş geldin!`, TX, 120);
   ctx.restore();
 
   // Member count pill
@@ -1393,17 +1426,20 @@ export async function createStaffRegisterCard(opts: StaffRegisterCardOptions): P
   ctx.restore();
 
   // Kullanıcı adı
+  const cleanUser = removeEmojis(opts.username) || 'Yetkili';
+  const cleanGuild = removeEmojis(opts.guildName) || 'Sunucu';
+
   ctx.save();
   ctx.font = 'bold 20px sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
-  const nameToDraw = opts.username.length > 14 ? opts.username.substring(0, 12) + '...' : opts.username;
+  const nameToDraw = cleanUser.length > 14 ? cleanUser.substring(0, 12) + '...' : cleanUser;
   ctx.fillText(nameToDraw, acx, AVY + AVS + 32);
 
   // Sunucu etiketi
   ctx.font = '12px sans-serif';
   ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-  const guildToDraw = opts.guildName.length > 16 ? opts.guildName.substring(0, 14) + '...' : opts.guildName;
+  const guildToDraw = cleanGuild.length > 16 ? cleanGuild.substring(0, 14) + '...' : cleanGuild;
   ctx.fillText(guildToDraw, acx, AVY + AVS + 52);
   ctx.restore();
 
@@ -1476,11 +1512,11 @@ export async function createStaffRegisterCard(opts: StaffRegisterCardOptions): P
   ctx.save();
   ctx.font = 'bold 12px sans-serif';
   ctx.fillStyle = '#3498db';
-  ctx.fillText(`♂ Erkek %${malePercent}`, barX, barY - 8);
+  ctx.fillText(`Erkek %${malePercent}`, barX, barY - 8);
 
   ctx.textAlign = 'right';
   ctx.fillStyle = '#ff6b9d';
-  ctx.fillText(`♀ Kız %${femalePercent}`, barX + barW, barY - 8);
+  ctx.fillText(`Kız %${femalePercent}`, barX + barW, barY - 8);
   ctx.restore();
 
   // Dağılım çubuğu arka planı
@@ -1527,6 +1563,8 @@ export async function createRegisterLeaderboardCard(opts: RegisterLeaderboardOpt
   const canvas = createCanvas(CW, CH);
   const ctx = canvas.getContext('2d');
 
+  const cleanGuild = removeEmojis(opts.guildName) || 'Sunucu';
+
   // Arka plan degrade
   const bg = ctx.createLinearGradient(0, 0, CW, CH);
   bg.addColorStop(0, '#0c0d17');
@@ -1539,15 +1577,18 @@ export async function createRegisterLeaderboardCard(opts: RegisterLeaderboardOpt
   ctx.save();
   ctx.font = 'bold 12px sans-serif';
   ctx.fillStyle = '#f39c12';
-  ctx.fillText('LİDERLİK SIRALAMASI', 35, 42);
+  ctx.fillText('LİDERLİK SIRALAMASI', 72, 42);
+
+  // Vektörel Kupa İkonu
+  drawTrophyIcon(ctx, 48, 62, 28);
 
   ctx.font = 'bold 26px sans-serif';
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(`🏆 ${opts.guildName} — En Çok Kayıt Yapanlar`, 35, 75);
+  ctx.fillText(`${cleanGuild} — En Çok Kayıt Yapanlar`, 72, 70);
 
   ctx.font = '13px sans-serif';
   ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-  ctx.fillText('Sunucuda en çok üye kaydeden yetkililer listelenmiştir.', 35, 98);
+  ctx.fillText('Sunucuda en çok üye kaydeden yetkililer listelenmiştir.', 72, 94);
   ctx.restore();
 
   // Satırlar
@@ -1557,6 +1598,7 @@ export async function createRegisterLeaderboardCard(opts: RegisterLeaderboardOpt
 
   for (let i = 0; i < rowCount; i++) {
     const entry = opts.entries[i];
+    const cleanEntryName = removeEmojis(entry.username) || 'Yetkili';
     const ry = startY + i * (rowH + rowGap);
     const rx = 35;
     const rw = CW - 70;
@@ -1620,7 +1662,7 @@ export async function createRegisterLeaderboardCard(opts: RegisterLeaderboardOpt
     ctx.font = 'bold 18px sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.textBaseline = 'middle';
-    const nameDraw = entry.username.length > 20 ? entry.username.substring(0, 18) + '...' : entry.username;
+    const nameDraw = cleanEntryName.length > 20 ? cleanEntryName.substring(0, 18) + '...' : cleanEntryName;
     ctx.fillText(nameDraw, avX + avS + 18, ry + rowH / 2);
     ctx.restore();
 
@@ -1635,7 +1677,7 @@ export async function createRegisterLeaderboardCard(opts: RegisterLeaderboardOpt
 
     ctx.font = '12px sans-serif';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-    ctx.fillText(`♂️ ${entry.male}  •  ♀️ ${entry.female}`, rx + rw - 24, ry + rowH / 2 + 14);
+    ctx.fillText(`Erkek: ${entry.male}  •  Kız: ${entry.female}`, rx + rw - 24, ry + rowH / 2 + 14);
     ctx.restore();
   }
 
@@ -1660,6 +1702,8 @@ export async function createSayCard(opts: SayCardOptions): Promise<Buffer> {
   const canvas = createCanvas(CW, CH);
   const ctx = canvas.getContext('2d');
 
+  const cleanGuild = removeEmojis(opts.guildName) || 'Sunucu';
+
   // Arka plan degrade
   const bg = ctx.createLinearGradient(0, 0, CW, CH);
   bg.addColorStop(0, '#0d0f1a');
@@ -1668,15 +1712,18 @@ export async function createSayCard(opts: SayCardOptions): Promise<Buffer> {
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, CW, CH);
 
+  // Vektörel Grafik Çubuk İkonu
+  drawAnalyticsIcon(ctx, 48, 62, 28);
+
   // Başlık
   ctx.save();
   ctx.font = 'bold 12px sans-serif';
   ctx.fillStyle = '#5865F2';
-  ctx.fillText('SUNUCU AKTİFLİK İSTATİSTİĞİ', 35, 38);
+  ctx.fillText('SUNUCU AKTİFLİK İSTATİSTİĞİ', 72, 38);
 
   ctx.font = 'bold 26px sans-serif';
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(`📊 ${opts.guildName} — Canlı Sayaç`, 35, 72);
+  ctx.fillText(`${cleanGuild} — Canlı Sayaç`, 72, 70);
   ctx.restore();
 
   // 4 Adet Sayaç Kutusu
