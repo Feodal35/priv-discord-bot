@@ -152,8 +152,15 @@ export function createDiscordClient(): Client {
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildVoiceStates,
       GatewayIntentBits.GuildModeration,
+      GatewayIntentBits.GuildMessageReactions,
     ],
-    partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User],
+    partials: [
+      Partials.Message,
+      Partials.Channel,
+      Partials.GuildMember,
+      Partials.User,
+      Partials.Reaction,
+    ],
   });
 
   client.once('ready', () => onReady(client));

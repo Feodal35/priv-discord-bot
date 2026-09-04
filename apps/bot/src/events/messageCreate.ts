@@ -1,11 +1,12 @@
-import { Message, TextChannel } from 'discord.js';
+import { Message, TextChannel, PermissionFlagsBits } from 'discord.js';
 import { autoModService } from '../services/automod.service';
 import { xpService } from '../services/xp.service';
 import { messageCacheService } from '../services/messageCache.service';
 import { guardService } from '../services/guard.service';
 import { wordGameService } from '../services/wordGame.service';
+import { logger } from '../utils/logger';
 
-// Kullanıcının belirttiği fotoğraf kanalı ID'si
+// Kullanıcının belirttiği fotoğraf & selfie kanalı ID'si
 export const PHOTO_CHANNEL_ID = '1543271245779566703';
 
 export async function onMessageCreate(message: Message) {
@@ -14,19 +15,44 @@ export async function onMessageCreate(message: Message) {
   // Mesajı silinme ve düzenlenme logları için önbelleğe al
   messageCacheService.set(message);
 
-  // 1. Fotoğraf Kanalı Otomatik Kalp Reaksiyonu (1543271245779566703)
+  // 1. Selfie & Fotoğraf Kanalı Kuralı (1543271245779566703)
   if (message.channelId === PHOTO_CHANNEL_ID) {
-    const hasImageAttachment = message.attachments.some((att) => {
-      const isImageMime = att.contentType?.startsWith('image/');
-      const hasImageExt = /\.(png|jpe?g|gif|webp|bmp)$/i.test(att.name || '');
-      return Boolean(isImageMime || hasImageExt);
-    });
+    const hasAttachment = message.attachments.size > 0;
+    const hasMediaUrl =
+      /(https?:\/\/[^\s]+?\.(?:png|jpe?g|gif|webp|bmp|heic|mp4|mov|webm))/i.test(message.content) ||
+      message.content.includes('tenor.com') ||
+      message.content.includes('giphy.com') ||
+      message.content.includes('cdn.discordapp.com') ||
+      message.content.includes('media.discordapp.net');
 
-    const hasImageUrlInContent = /(https?:\/\/[^\s]+?\.(?:png|jpe?g|gif|webp|bmp))/i.test(message.content);
+    const hasMedia = hasAttachment || hasMediaUrl;
 
-    // Eğer mesaja fotoğraf/görsel iliştirilmişse otomatik kalp koy
-    if (hasImageAttachment || hasImageUrlInContent) {
-      await message.react('❤️').catch(() => {});
+    if (hasMedia) {
+      // Fotoğraf / medya varsa otomatik kalp koy
+      try {
+        await message.react('❤️');
+      } catch (err) {
+        logger.error(`[SELFIE] ${message.id} mesajına kalp reaksiyonu eklenemedi:`, err);
+      }
+    } else {
+      // Fotoğraf / medya yoksa: Bu kanalda mesaj yazmak yasak!
+      const isAdmin = message.member?.permissions.has(PermissionFlagsBits.Administrator);
+      if (!isAdmin) {
+        try {
+          await message.delete().catch(() => {});
+          const textChannel = message.channel as TextChannel;
+          const warnMsg = await textChannel.send({
+            content: `📸 <@${message.author.id}>, bu kanal **Selfie & Fotoğraf** kanalıdır! Yalnızca fotoğraf veya video paylaşabilirsiniz. Sohbet etmek ve düz metin yazmak yasaktır.`,
+          }).catch(() => null);
+
+          if (warnMsg) {
+            setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
+          }
+        } catch (err) {
+          logger.error('[SELFIE] Metin mesajı silinemedi:', err);
+        }
+        return; // İşlemi burada sonlandır
+      }
     }
   }
 
