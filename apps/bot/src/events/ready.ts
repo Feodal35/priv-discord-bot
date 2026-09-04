@@ -10,7 +10,7 @@ import { voiceService } from '../services/voice.service';
 import { reminderService } from '../services/reminder.service';
 import { birthdayService } from '../services/birthday.service';
 import { guildService } from '../services/guild.service';
-import { deployCommands, clearGuildCommands } from '../deploy-commands';
+import { deployToGuildInstant, clearGlobalCommands } from '../deploy-commands';
 import { clanRoleService } from '../services/clanRole.service';
 
 // Botun 7/24 bağlı kalacağı kalıcı ses kanalı
@@ -19,16 +19,15 @@ export const AUTO_JOIN_CHANNEL_ID = '1543030493224632331';
 export async function onReady(client: Client) {
   logger.info(`🤖 ${client.user?.tag} başarıyla Discord'a bağlandı!`, { service: 'READY' });
 
-  // 0. Komutları Discord ile senkronize et ve duplike (2 adet gözükme) sorununu çöz:
-  //    Daha önce sunucu bazlı (guild-level) kaydedilen komutlar Discord arayüzünde
-  //    global komutlarla çakışıp her komutun 2 kez çıkmasına sebep olur.
-  //    Sunuculardaki eski özel kayıtları temizleyip tek bir global kayıt bırakıyoruz!
+  // 0. Komutları ANINDA sunucuya kaydet ve global önbelleği temizle:
+  //    Discord global komutları 1 saat bekletir, ancak sunucu komutları 0 saniyede (anında) görünür!
+  //    Global komutları temizleyip sunucuya anında yükleyerek komutların saniyesinde ve tek olarak görünmesini sağlıyoruz.
   try {
+    await clearGlobalCommands();
     for (const [guildId] of client.guilds.cache) {
-      await clearGuildCommands(guildId);
+      await deployToGuildInstant(guildId);
     }
-    await deployCommands(); // Tek ve net global kayıt
-    logger.info(`✅ Komutlar senkronize edildi: Çift gözükme temizlendi, tek global liste aktif!`, { service: 'READY' });
+    logger.info(`⚡ Tüm slash komutları Discord'da ANINDA (0 saniyede) aktif edildi!`, { service: 'READY' });
   } catch (err) {
     logger.error('Komutlar senkronize edilirken hata oluştu:', err);
   }
