@@ -51,6 +51,7 @@ export async function onReady(client: Client) {
     await guildService.updateGuildSettings(guildId, {
       confessionChannelId: '1545496276576116878',
       confessionEnabled: true,
+      welcomeChannelId: '1542620110882349162',
     }).catch(() => {});
   }
 

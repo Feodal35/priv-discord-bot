@@ -6,6 +6,9 @@ import { createSuccessEmbed } from '../utils/embed';
 import { achievementService } from './achievement.service';
 import { questService } from './quest.service';
 
+// Kullanıcının belirttiği ana sohbet kanalı
+export const MAIN_CHAT_CHANNEL_ID = '1542620110882349162';
+
 export class XpService {
   // Anti-spam için son mesaj önbelleği (userId-guildId -> { content, timestamp })
   private lastMessages = new Map<string, { content: string; timestamp: number }>();
@@ -106,10 +109,15 @@ export class XpService {
 
     const newLevel = getLevelFromXp(userGuild.xp);
     if (newLevel > userGuild.level) {
-      await prisma.userGuild.update({
-        where: { userId_guildId: { userId, guildId } },
-        data: { level: newLevel },
-      });
+      const chatChannel = (await client.channels.fetch(MAIN_CHAT_CHANNEL_ID).catch(() => null)) as TextChannel | null;
+      if (chatChannel) {
+        await this.handleLevelUp(guildId, userId, newLevel, userGuild.level, chatChannel, client);
+      } else {
+        await prisma.userGuild.update({
+          where: { userId_guildId: { userId, guildId } },
+          data: { level: newLevel },
+        });
+      }
     }
   }
 

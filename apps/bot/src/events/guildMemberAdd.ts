@@ -29,10 +29,14 @@ export async function onGuildMemberAdd(member: GuildMember) {
       welcomeChannel = (await guild.channels.fetch(settings.welcomeChannelId).catch(() => null)) as TextChannel | null;
     }
 
-    // Eğer ayarlı kanal yoksa adı hoşgeldin, welcome, giriş veya genel olan kanalı dene
+    // 1542620110882349162 (Ana Sohbet) veya isimden bul
+    if (!welcomeChannel) {
+      welcomeChannel = (await guild.channels.fetch('1542620110882349162').catch(() => null)) as TextChannel | null;
+    }
+
     if (!welcomeChannel) {
       welcomeChannel = guild.channels.cache.find(
-        (ch) => ch.isTextBased() && ['hoş-geldin', 'hosgeldin', 'welcome', 'giris-cikis', 'giriş-çıkış', 'genel-sohbet', 'chat'].includes(ch.name)
+        (ch) => ch.isTextBased() && ['sohbet', 'hoş-geldin', 'hosgeldin', 'welcome', 'giris-cikis', 'giriş-çıkış', 'genel-sohbet', 'chat'].includes(ch.name)
       ) as TextChannel | null;
     }
 
