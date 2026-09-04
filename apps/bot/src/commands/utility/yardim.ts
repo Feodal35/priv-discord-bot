@@ -24,7 +24,7 @@ export const yardimCommand: SlashCommand = {
         { name: '👤 Sosyal & Profil', value: '`/profil`, `/seviye`, `/streak`, `/başarımlar`, `/hafıza`, `/yılözeti`, `/zengin`, `/verilerim`', inline: false },
         { name: '💰 Ekonomi & Market', value: '`/bakiye`, `/günlük`, `/çalış`, `/gönder`, `/market`, `/envanter`, `/görev`', inline: false },
         { name: '🎮 Mini Oyunlar & Eğlence', value: '`/oyun xox`, `/oyun tkm`, `/oyun yazı-tura`, `/oyun zar`, `/ship`', inline: false },
-        { name: '🎤 Ses & Dinamik Odalar', value: '`/git`, `/çek`, `/voice kilitle`, `/voice aç`, `/voice limit`, `/voice isim`', inline: false },
+        { name: '🎤 Ses & Dinamik Odalar', value: '`/git`, `/çek`, `/topluçek`, `/toplutaşı`, `/voice kilitle`, `/voice aç`, `/voice limit`', inline: false },
         { name: '🛡️ Moderasyon & Güvenlik', value: '`/sesgec`, `/uyar`, `/sustur`, `/timeout`, `/at`, `/yasakla`, `/temizle`, `/kilitle`, `/aç`', inline: false },
         { name: '⚙️ Sunucu & Araçlar', value: '`/say`, `/kurulum`, `/ayarlar`, `/sunucu`, `/sıralama`, `/itiraf`, `/anket`, `/doğumgünü`, `/hatırlat`', inline: false },
       ],

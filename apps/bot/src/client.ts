@@ -46,6 +46,8 @@ import { boosterRenkCommand } from './commands/utility/boosterRenk';
 import { voiceCommand } from './commands/voice/voice';
 import { gitCommand } from './commands/voice/git';
 import { cekCommand } from './commands/voice/cek';
+import { topluCekCommand } from './commands/voice/topluCek';
+import { topluTasiCommand } from './commands/voice/topluTasi';
 
 // Moderasyon Komutları
 import { uyarCommand } from './commands/moderation/uyar';
@@ -121,6 +123,8 @@ const allCommands: SlashCommand[] = [
   voiceCommand,
   gitCommand,
   cekCommand,
+  topluCekCommand,
+  topluTasiCommand,
   uyarCommand,
   timeoutCommand,
   susturCommand,
