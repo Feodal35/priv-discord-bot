@@ -36,6 +36,8 @@ import { hatirlatCommand } from './commands/utility/hatirlat';
 
 // Ses Komutları
 import { voiceCommand } from './commands/voice/voice';
+import { gitCommand } from './commands/voice/git';
+import { cekCommand } from './commands/voice/cek';
 
 // Moderasyon Komutları
 import { uyarCommand } from './commands/moderation/uyar';
@@ -93,6 +95,8 @@ const allCommands: SlashCommand[] = [
   dogumgunuCommand,
   hatirlatCommand,
   voiceCommand,
+  gitCommand,
+  cekCommand,
   uyarCommand,
   timeoutCommand,
   susturCommand,
