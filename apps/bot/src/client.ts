@@ -10,6 +10,7 @@ import { hafizaCommand } from './commands/social/hafiza';
 import { yilozetiCommand } from './commands/social/yilozeti';
 import { verilerimCommand } from './commands/social/verilerim';
 import { verilerimiSilCommand } from './commands/social/verilerimi-sil';
+import { zenginCommand } from './commands/social/zengin';
 
 // Ekonomi Komutları
 import { bakiyeCommand } from './commands/economy/bakiye';
@@ -73,6 +74,7 @@ const allCommands: SlashCommand[] = [
   yilozetiCommand,
   verilerimCommand,
   verilerimiSilCommand,
+  zenginCommand,
   bakiyeCommand,
   gunlukCommand,
   calisCommand,

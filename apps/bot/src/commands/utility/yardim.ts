@@ -21,7 +21,7 @@ export const yardimCommand: SlashCommand = {
         'Sunucumuzun sosyal ekosistemine hoş geldin! Priv, arkadaş topluluğumuz için özel olarak geliştirilmiş modern bir Discord botudur.\n\nİncelemek istediğin kategoriyi aşağıdaki menüden seçebilirsin:',
       color: DEFAULT_COLORS.PRIMARY,
       fields: [
-        { name: '👤 Sosyal & Profil', value: '`/profil`, `/seviye`, `/streak`, `/başarımlar`, `/hafıza`, `/yılözeti`, `/verilerim`', inline: false },
+        { name: '👤 Sosyal & Profil', value: '`/profil`, `/seviye`, `/streak`, `/başarımlar`, `/hafıza`, `/yılözeti`, `/zengin`, `/verilerim`', inline: false },
         { name: '💰 Ekonomi & Market', value: '`/bakiye`, `/günlük`, `/çalış`, `/gönder`, `/market`, `/envanter`, `/görev`', inline: false },
         { name: '🎮 Mini Oyunlar & Eğlence', value: '`/oyun xox`, `/oyun tkm`, `/oyun yazı-tura`, `/oyun zar`, `/ship`', inline: false },
         { name: '🎤 Ses & Dinamik Odalar', value: '`/voice kilitle`, `/voice aç`, `/voice limit`, `/voice isim`', inline: false },
