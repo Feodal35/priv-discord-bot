@@ -15,6 +15,8 @@ import { createEmbed } from '../utils/embed';
 import { DEFAULT_COLORS } from '@priv/shared';
 import { logger } from '../utils/logger';
 import { logService } from './log.service';
+import { prisma } from '@priv/database';
+import { userService } from './user.service';
 
 export interface RegisterSettings {
   enabled: boolean;
@@ -55,7 +57,7 @@ class RegisterService {
     this.loadData();
   }
 
-  private loadData() {
+  private async loadData() {
     try {
       if (fs.existsSync(DATA_FILE)) {
         const raw = fs.readFileSync(DATA_FILE, 'utf-8');
@@ -67,6 +69,36 @@ class RegisterService {
         }
         if (Array.isArray(parsed.records)) {
           this.records = parsed.records;
+        }
+      }
+
+      // Veritabanından (Postgres) kalıcı kayıtları yükle
+      const dbLogs = await prisma.moderationLog.findMany({
+        where: { action: 'REGISTER' },
+        orderBy: { createdAt: 'desc' },
+      }).catch(() => []);
+
+      for (const log of dbLogs) {
+        let name = 'Bilinmeyen';
+        let gender: 'MALE' | 'FEMALE' = 'MALE';
+        try {
+          if (log.reason) {
+            const parsed = JSON.parse(log.reason);
+            name = parsed.name || name;
+            gender = parsed.gender || gender;
+          }
+        } catch { /* skip */ }
+
+        if (!this.records.some((r) => r.id === log.id || (r.userId === log.targetUserId && Math.abs(new Date(r.registeredAt).getTime() - log.createdAt.getTime()) < 10000))) {
+          this.records.push({
+            id: log.id,
+            guildId: log.guildId,
+            userId: log.targetUserId,
+            staffId: log.moderatorId,
+            name,
+            gender,
+            registeredAt: log.createdAt.toISOString(),
+          });
         }
       }
     } catch (e) {
@@ -370,7 +402,7 @@ class RegisterService {
       logger.error('[REGISTER] Rol işlemleri sırasında hata:', roleErr);
     }
 
-    // 3. Kayıt geçmişi & İstatistik ekle
+    // 3. Kayıt geçmişi & İstatistik ekle (Hem RAM hem Kalıcı DB)
     const record: RegisterRecord = {
       id: `${Date.now()}_${targetMember.id}`,
       guildId: guild.id,
@@ -380,8 +412,28 @@ class RegisterService {
       gender,
       registeredAt: new Date().toISOString(),
     };
-    this.records.push(record);
+    this.records.unshift(record);
     this.saveData();
+
+    // Veritabanına (Prisma Postgres) kalıcı kaydet
+    try {
+      await userService.getOrCreateUser(targetMember.id, targetMember.user.username, targetMember.user.avatar).catch(() => null);
+      await userService.getOrCreateUser(staffMember.id, staffMember.user.username, staffMember.user.avatar).catch(() => null);
+      await prisma.moderationLog.create({
+        data: {
+          id: record.id,
+          guildId: guild.id,
+          targetUserId: targetMember.id,
+          moderatorId: staffMember.id,
+          action: 'REGISTER',
+          reason: JSON.stringify({ name: cleanName, gender }),
+        },
+      }).catch((dbErr) => {
+        logger.error('[REGISTER] DB kaydı sırasında hata:', dbErr);
+      });
+    } catch {
+      /* sessiz */
+    }
 
     // 4. Orijinal karşılama mesajı varsa 4 butonlu yapıya dönüştür (Erkek, Kız, Kayıt Bilgisi, Yeniden Kaydet)
     if (originalMessage && originalMessage.editable) {

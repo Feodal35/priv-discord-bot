@@ -83,37 +83,70 @@ export async function handleButtonInteraction(interaction: ButtonInteraction) {
     const targetUserId = customId.replace('reg_info_', '');
     const history = registerService.getHistory(guild.id, targetUserId);
 
-    if (history.length === 0) {
-      await interaction.reply({
-        embeds: [
-          createEmbed({
-            title: '📋 Kayıt Bilgisi',
-            description: `<@${targetUserId}> kullanıcısına ait henüz kaydedilmiş bir kayıt verisi bulunmuyor.`,
-            color: DEFAULT_COLORS.PRIMARY,
-          }),
-        ],
-        ephemeral: true,
+    if (history.length > 0) {
+      const last = history[0];
+      const genderText = last.gender === 'MALE' ? '♂️ Erkek' : '♀️ Kız';
+      const timeUnix = Math.floor(new Date(last.registeredAt).getTime() / 1000);
+
+      const embed = createEmbed({
+        title: '📋 Kullanıcı Kayıt Bilgisi',
+        description:
+          `**Kullanıcı:** <@${targetUserId}>\n\n` +
+          `• **Kayıt Eden Yetkili:** <@${last.staffId}>\n` +
+          `• **Kayıt Edilen İsim:** \`${last.name}\`\n` +
+          `• **Cinsiyet:** ${genderText}\n` +
+          `• **Kayıt Tarihi:** <t:${timeUnix}:f> (<t:${timeUnix}:R>)\n` +
+          `• **Toplam Kayıt Sayısı:** \`${history.length}\` kez kayıt edilmiş.`,
+        color: DEFAULT_COLORS.PRIMARY,
       });
+
+      await interaction.reply({ embeds: [embed], ephemeral: true });
       return;
     }
 
-    const last = history[0];
-    const genderText = last.gender === 'MALE' ? '♂️ Erkek' : '♀️ Kız';
-    const timeUnix = Math.floor(new Date(last.registeredAt).getTime() / 1000);
+    // Akıllı Fallback: Veritabanı yeniden başlama öncesine aitse veya log henüz düşmediyse üyenin sunucu rolünü tara
+    const targetMember = await guild.members.fetch(targetUserId).catch(() => null);
+    const settings = registerService.getSettings(guild.id);
 
-    const embed = createEmbed({
-      title: '📋 Kullanıcı Kayıt Bilgisi',
-      description:
-        `**Kullanıcı:** <@${targetUserId}>\n\n` +
-        `• **Kayıt Eden Yetkili:** <@${last.staffId}>\n` +
-        `• **Kayıt Edilen İsim:** \`${last.name}\`\n` +
-        `• **Cinsiyet:** ${genderText}\n` +
-        `• **Kayıt Tarihi:** <t:${timeUnix}:f> (<t:${timeUnix}:R>)\n` +
-        `• **Toplam Kayıt Sayısı:** \`${history.length}\` kez kayıt edilmiş.`,
-      color: DEFAULT_COLORS.PRIMARY,
+    let detectedGender = 'Belirlenemedi';
+    if (settings.maleRoleId && targetMember?.roles.cache.has(settings.maleRoleId)) {
+      detectedGender = '♂️ Erkek';
+    } else if (settings.femaleRoleId && targetMember?.roles.cache.has(settings.femaleRoleId)) {
+      detectedGender = '♀️ Kız';
+    } else if (targetMember) {
+      // Rol isimlerinden tara
+      const hasMale = targetMember.roles.cache.some((r) => ['erkek', 'boy', 'man'].some((k) => r.name.toLowerCase().includes(k)));
+      const hasFemale = targetMember.roles.cache.some((r) => ['kadın', 'kadin', 'kız', 'kiz', 'girl'].some((k) => r.name.toLowerCase().includes(k)));
+      if (hasMale) detectedGender = '♂️ Erkek';
+      else if (hasFemale) detectedGender = '♀️ Kız';
+    }
+
+    if (targetMember && detectedGender !== 'Belirlenemedi') {
+      const joinUnix = targetMember.joinedTimestamp ? Math.floor(targetMember.joinedTimestamp / 1000) : Math.floor(Date.now() / 1000);
+      const embed = createEmbed({
+        title: '📋 Kullanıcı Kayıt Bilgisi',
+        description:
+          `**Kullanıcı:** <@${targetUserId}>\n\n` +
+          `• **Kayıt Edilen İsim:** \`${targetMember.displayName}\`\n` +
+          `• **Cinsiyet:** ${detectedGender}\n` +
+          `• **Sunucuya Katılış:** <t:${joinUnix}:f> (<t:${joinUnix}:R>)\n` +
+          `• **Durum:** ✅ Sunucuda Kayıtlı Aktif Üye`,
+        color: DEFAULT_COLORS.PRIMARY,
+      });
+      await interaction.reply({ embeds: [embed], ephemeral: true });
+      return;
+    }
+
+    await interaction.reply({
+      embeds: [
+        createEmbed({
+          title: '📋 Kayıt Bilgisi',
+          description: `<@${targetUserId}> kullanıcısına ait henüz kaydedilmiş bir kayıt verisi veya aktif cinsiyet rolü bulunmuyor.`,
+          color: DEFAULT_COLORS.PRIMARY,
+        }),
+      ],
+      ephemeral: true,
     });
-
-    await interaction.reply({ embeds: [embed], ephemeral: true });
     return;
   }
 
