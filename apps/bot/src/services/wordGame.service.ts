@@ -19,7 +19,11 @@ export interface WordGameState {
 
 export class WordGameService {
   private games = new Map<string, WordGameState>(); // guildId -> state
-  private dictionary = new Set<string>();
+  private dictionaryBuffer: Buffer | null = null;
+  private wordOffsets: Uint32Array = new Uint32Array(0);
+  private wordLengths: Uint8Array = new Uint8Array(0);
+  private wordCount = 0;
+  private fallbackDictionary = new Set<string>();
   private userCooldowns = new Map<string, number>();
 
   constructor() {
@@ -31,21 +35,50 @@ export class WordGameService {
     const candidatePaths = [
       path.join(process.cwd(), 'data', 'turkish_words.txt'),
       path.join(process.cwd(), 'apps', 'bot', 'src', 'assets', 'turkish_words.txt'),
+      path.join(process.cwd(), 'apps', 'bot', 'dist', 'assets', 'turkish_words.txt'),
       path.join(__dirname, '..', 'assets', 'turkish_words.txt'),
-      path.join(__dirname, '..', '..', 'data', 'turkish_words.txt'),
+      path.join(__dirname, '..', '..', 'src', 'assets', 'turkish_words.txt'),
+      path.join(__dirname, '..', '..', '..', 'data', 'turkish_words.txt'),
     ];
 
     let loaded = false;
     for (const p of candidatePaths) {
       if (fs.existsSync(p)) {
         try {
-          const content = fs.readFileSync(p, 'utf-8');
-          const lines = content.split(/\r?\n/);
-          for (const line of lines) {
-            const w = line.trim().toLocaleLowerCase('tr-TR');
-            if (w.length >= 2) this.dictionary.add(w);
+          const fileBuf = fs.readFileSync(p);
+          let lines = 0;
+          for (let i = 0; i < fileBuf.length; i++) {
+            if (fileBuf[i] === 10) lines++;
           }
-          logger.info(`[WORD_GAME] Türkçe sözlük yüklendi: ${this.dictionary.size} kelime (${p})`);
+          if (fileBuf.length > 0 && fileBuf[fileBuf.length - 1] !== 10) lines++;
+
+          const offsets = new Uint32Array(lines);
+          const lengths = new Uint8Array(lines);
+          let count = 0;
+          let start = 0;
+
+          for (let i = 0; i < fileBuf.length; i++) {
+            if (fileBuf[i] === 10 || fileBuf[i] === 13) {
+              if (i > start) {
+                offsets[count] = start;
+                lengths[count] = i - start;
+                count++;
+              }
+              start = i + 1;
+            }
+          }
+          if (start < fileBuf.length) {
+            offsets[count] = start;
+            lengths[count] = fileBuf.length - start;
+            count++;
+          }
+
+          this.dictionaryBuffer = fileBuf;
+          this.wordOffsets = offsets.subarray(0, count);
+          this.wordLengths = lengths.subarray(0, count);
+          this.wordCount = count;
+
+          logger.info(`[WORD_GAME] Devasa Türkçe sözlük yüklendi: ${count.toLocaleString('tr-TR')} kelime (${p})`);
           loaded = true;
           break;
         } catch (e) {
@@ -54,14 +87,14 @@ export class WordGameService {
       }
     }
 
-    if (!loaded || this.dictionary.size === 0) {
+    if (!loaded || this.wordCount === 0) {
       logger.warn('[WORD_GAME] Sözlük dosyası bulunamadı, temel kelime listesi yükleniyor.');
       const fallback = [
         'elma', 'armut', 'araba', 'masa', 'kalem', 'kitap', 'bilgisayar', 'telefon', 'defter',
         'kedi', 'köpek', 'aslan', 'kaplan', 'tavşan', 'kuş', 'kartal', 'deniz', 'nehir',
         'göl', 'orman', 'ağaç', 'yaprak', 'çiçek', 'güneş', 'dünya', 'ay', 'yıldız',
       ];
-      for (const w of fallback) this.dictionary.add(w);
+      for (const w of fallback) this.fallbackDictionary.add(w);
     }
   }
 
@@ -194,31 +227,74 @@ export class WordGameService {
     return last;
   }
 
+  private hasWordInDictionary(word: string): boolean {
+    if (!this.dictionaryBuffer || this.wordCount === 0) return false;
+    const target = Buffer.from(word, 'utf-8');
+    let l = 0;
+    let r = this.wordCount - 1;
+
+    while (l <= r) {
+      const m = (l + r) >> 1;
+      const off = this.wordOffsets[m];
+      const len = this.wordLengths[m];
+      const slice = this.dictionaryBuffer.subarray(off, off + len);
+      const cmp = Buffer.compare(slice, target);
+      if (cmp === 0) return true;
+      if (cmp < 0) l = m + 1;
+      else r = m - 1;
+    }
+
+    return false;
+  }
+
   /**
-   * Türkçe kelime doğrulama: TDK sözlük kontrolü ve Türkçe çekim eki çözümlemesi
+   * Türkçe kelime doğrulama: 1.17 milyon kelimelik TDK + Zemberek sözlük kontrolü,
+   * ünsüz yumuşaması (p->b, ç->c, t->d, k->ğ/g) ve Türkçe morfoloji çözümlemesi
    */
   private isValidWord(word: string): boolean {
-    if (this.dictionary.has(word)) return true;
+    if (this.hasWordInDictionary(word) || this.fallbackDictionary.has(word)) return true;
 
-    // Yaygın Türkçe ekler için gövde kontrolü
+    // Yaygın Türkçe ekler ve ünsüz yumuşaması için gövde kontrolü
     const suffixes = [
       'lar', 'ler',
       'dan', 'den', 'tan', 'ten',
       'da', 'de', 'ta', 'te',
-      'ya', 'ye', 'na', 'ne',
-      'ın', 'in', 'un', 'ün',
-      'ım', 'im', 'um', 'üm',
-      'lık', 'lik', 'luk', 'lük',
+      'ya', 'ye', 'na', 'ne', 'a', 'e',
+      'ın', 'in', 'un', 'ün', 'nın', 'nin', 'nun', 'nün',
+      'ım', 'im', 'um', 'üm', 'mız', 'miz', 'muz', 'müz',
+      'lık', 'lik', 'luk', 'lük', 'lığ', 'liğ', 'luğ', 'lüğ',
       'cı', 'ci', 'cu', 'cü', 'çı', 'çi', 'çu', 'çü',
       'sız', 'siz', 'suz', 'süz',
-      'mak', 'mek',
+      'mak', 'mek', 'ma', 'me',
       'mış', 'miş', 'muş', 'müş',
+      'ıyor', 'iyor', 'uyor', 'üyor', 'yor',
+      'acak', 'ecek', 'acağ', 'eceğ',
+      'dı', 'di', 'du', 'dü', 'tı', 'ti', 'tu', 'tü',
+      'sa', 'se',
+      'ken', 'ınca', 'ince', 'unca', 'ünce',
+      'ıp', 'ip', 'up', 'üp',
+      'erek', 'arak',
     ];
 
     for (const suf of suffixes) {
       if (word.endsWith(suf) && word.length - suf.length >= 2) {
         const stem = word.slice(0, -suf.length);
-        if (this.dictionary.has(stem)) return true;
+        if (this.hasWordInDictionary(stem) || this.fallbackDictionary.has(stem)) return true;
+
+        // Ünsüz yumuşaması geri dönüşümü: ağac-a -> ağaç, kitab-a -> kitap, yurd-u -> yurt, reng-i -> renk
+        if (stem.endsWith('b')) {
+          const root = stem.slice(0, -1) + 'p';
+          if (this.hasWordInDictionary(root) || this.fallbackDictionary.has(root)) return true;
+        } else if (stem.endsWith('c')) {
+          const root = stem.slice(0, -1) + 'ç';
+          if (this.hasWordInDictionary(root) || this.fallbackDictionary.has(root)) return true;
+        } else if (stem.endsWith('d')) {
+          const root = stem.slice(0, -1) + 't';
+          if (this.hasWordInDictionary(root) || this.fallbackDictionary.has(root)) return true;
+        } else if (stem.endsWith('ğ') || stem.endsWith('g')) {
+          const root = stem.slice(0, -1) + 'k';
+          if (this.hasWordInDictionary(root) || this.fallbackDictionary.has(root)) return true;
+        }
       }
     }
 

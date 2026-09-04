@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "./dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs=require('fs'); if(!fs.existsSync('dist/assets')) fs.mkdirSync('dist/assets', {recursive:true}); fs.copyFileSync('src/assets/turkish_words.txt', 'dist/assets/turkish_words.txt');\"",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "deploy:commands": "tsx src/deploy-commands.ts",
