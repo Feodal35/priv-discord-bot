@@ -1027,6 +1027,21 @@ export async function createProfileCard(opts: {
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, CW, CH);
 
+  // Arka plan neon parıltıları
+  const glow = ctx.createRadialGradient(80, 130, 10, 80, 130, 180);
+  glow.addColorStop(0, 'rgba(88, 101, 242, 0.25)');
+  glow.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Dış çerçeve
+  ctx.save();
+  clipRoundRect(ctx, 4, 4, CW - 8, CH - 8, 16);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+
   // Grid dots
   ctx.fillStyle = 'rgba(255,255,255,0.02)';
   for (let gx = 0; gx < CW; gx += 22)
@@ -1080,13 +1095,18 @@ export async function createProfileCard(opts: {
 
   const TX = AVX + AVS + 22;
 
+  // Emojilerden arındırılmış kullanıcı adı ve başlık
+  const cleanUser = removeEmojis(opts.username) || 'Kullanıcı';
+  const cleanTitle = removeEmojis(opts.title) || 'Üye';
+  const cleanBio = removeEmojis(opts.bio) || 'Henüz bir biyografi belirlenmedi.';
+
   // Username
   ctx.save();
   ctx.font = 'bold 22px sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
-  ctx.fillText(opts.username, TX, 22);
+  ctx.fillText(cleanUser, TX, 22);
   ctx.restore();
 
   // Title
@@ -1095,7 +1115,7 @@ export async function createProfileCard(opts: {
   ctx.fillStyle = accentColor;
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
-  ctx.fillText(opts.title, TX, 50);
+  ctx.fillText(cleanTitle, TX, 50);
   ctx.restore();
 
   // Bio
@@ -1104,7 +1124,7 @@ export async function createProfileCard(opts: {
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
-  ctx.fillText(opts.bio.substring(0, 55), TX, 70);
+  ctx.fillText(cleanBio.substring(0, 55), TX, 70);
   ctx.restore();
 
   // Badges row
