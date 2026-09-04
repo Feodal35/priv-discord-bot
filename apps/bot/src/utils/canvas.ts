@@ -1599,11 +1599,14 @@ export interface SayCardOptions {
   onlineMembers: number;
   voiceMembers: number;
   boostCount: number;
+  maleCount?: number;
+  femaleCount?: number;
 }
 
 export async function createSayCard(opts: SayCardOptions): Promise<Buffer> {
+  const hasGender = opts.maleCount !== undefined && opts.femaleCount !== undefined;
   const CW = 800;
-  const CH = 260;
+  const CH = hasGender ? 330 : 260;
   const canvas = createCanvas(CW, CH);
   const ctx = canvas.getContext('2d');
 
@@ -1624,59 +1627,116 @@ export async function createSayCard(opts: SayCardOptions): Promise<Buffer> {
   ctx.save();
   ctx.font = 'bold 12px sans-serif';
   ctx.fillStyle = '#5865F2';
-  ctx.fillText('SUNUCU AKTİFLİK İSTATİSTİĞİ', 72, 38);
+  ctx.fillText('SUNUCU AKTİFLİK VE ÜYE SAYIMI', 72, 38);
 
   ctx.font = 'bold 26px sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.fillText(`${cleanGuild} — Canlı Sayaç`, 72, 70);
   ctx.restore();
 
-  // 4 Adet Sayaç Kutusu
-  const boxW = 168;
-  const boxH = 120;
-  const boxY = 96;
-  const startX = 35;
-  const gap = 18;
+  if (hasGender) {
+    // 6 Adet Sayaç Kutusu (2 satır × 3 sütun)
+    const boxW = 230;
+    const boxH = 95;
+    const startX = 35;
+    const gapX = 20;
+    const rowGap = 15;
+    const startY = 96;
 
-  const boxes = [
-    { label: 'TOPLAM ÜYE', val: opts.totalMembers, color: '#5865F2', sub: 'Sunucu Geneli' },
-    { label: 'ÇEVRİM İÇİ', val: opts.onlineMembers, color: '#2ecc71', sub: 'Aktif Üyeler' },
-    { label: 'SESTEKİLER', val: opts.voiceMembers, color: '#e67e22', sub: 'Ses Odalarında' },
-    { label: 'BOOST SAYISI', val: opts.boostCount, color: '#f47fff', sub: 'Takviyeler' },
-  ];
+    const boxes = [
+      // Satır 1
+      { label: 'TOPLAM ÜYE', val: opts.totalMembers, color: '#5865F2', sub: 'Sunucu Geneli' },
+      { label: 'ÇEVRİM İÇİ', val: opts.onlineMembers, color: '#2ecc71', sub: 'Aktif Üyeler' },
+      { label: 'SESTEKİLER', val: opts.voiceMembers, color: '#e67e22', sub: 'Ses Odalarında' },
+      // Satır 2
+      { label: '♂️ ERKEK ÜYE', val: opts.maleCount!, color: '#3498db', sub: 'Kayıtlı Erkekler' },
+      { label: '♀️ KIZ ÜYE', val: opts.femaleCount!, color: '#e91e63', sub: 'Kayıtlı Kızlar' },
+      { label: '💎 BOOST SAYISI', val: opts.boostCount, color: '#f47fff', sub: 'Takviyeler' },
+    ];
 
-  boxes.forEach((b, i) => {
-    const bx = startX + i * (boxW + gap);
+    boxes.forEach((b, i) => {
+      const col = i % 3;
+      const row = Math.floor(i / 3);
+      const bx = startX + col * (boxW + gapX);
+      const by = startY + row * (boxH + rowGap);
 
-    // Kutu arka planı
-    ctx.save();
-    clipRoundRect(ctx, bx, boxY, boxW, boxH, 14);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
+      // Kutu arka planı
+      ctx.save();
+      clipRoundRect(ctx, bx, by, boxW, boxH, 12);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
 
-    // Üst renkli çizgi
-    ctx.fillStyle = b.color;
-    ctx.fillRect(bx + 16, boxY, boxW - 32, 3);
-    ctx.restore();
+      // Sol dikey renkli vurgu çizgisi
+      ctx.fillStyle = b.color;
+      ctx.fillRect(bx, by, 4, boxH);
+      ctx.restore();
 
-    // Metinler
-    ctx.save();
-    ctx.font = 'bold 11px sans-serif';
-    ctx.fillStyle = b.color;
-    ctx.fillText(b.label, bx + 16, boxY + 28);
+      // Metinler
+      ctx.save();
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillStyle = b.color;
+      ctx.fillText(b.label, bx + 16, by + 24);
 
-    ctx.font = 'bold 36px sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(String(b.val), bx + 16, boxY + 74);
+      ctx.font = 'bold 30px sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(String(b.val), bx + 16, by + 60);
 
-    ctx.font = '12px sans-serif';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
-    ctx.fillText(b.sub, bx + 16, boxY + 98);
-    ctx.restore();
-  });
+      ctx.font = '11px sans-serif';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.fillText(b.sub, bx + 16, by + 80);
+      ctx.restore();
+    });
+  } else {
+    // 4 Adet Sayaç Kutusu (Klasik)
+    const boxW = 168;
+    const boxH = 120;
+    const boxY = 96;
+    const startX = 35;
+    const gap = 18;
+
+    const boxes = [
+      { label: 'TOPLAM ÜYE', val: opts.totalMembers, color: '#5865F2', sub: 'Sunucu Geneli' },
+      { label: 'ÇEVRİM İÇİ', val: opts.onlineMembers, color: '#2ecc71', sub: 'Aktif Üyeler' },
+      { label: 'SESTEKİLER', val: opts.voiceMembers, color: '#e67e22', sub: 'Ses Odalarında' },
+      { label: 'BOOST SAYISI', val: opts.boostCount, color: '#f47fff', sub: 'Takviyeler' },
+    ];
+
+    boxes.forEach((b, i) => {
+      const bx = startX + i * (boxW + gap);
+
+      // Kutu arka planı
+      ctx.save();
+      clipRoundRect(ctx, bx, boxY, boxW, boxH, 14);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Üst renkli çizgi
+      ctx.fillStyle = b.color;
+      ctx.fillRect(bx + 16, boxY, boxW - 32, 3);
+      ctx.restore();
+
+      // Metinler
+      ctx.save();
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillStyle = b.color;
+      ctx.fillText(b.label, bx + 16, boxY + 28);
+
+      ctx.font = 'bold 36px sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(String(b.val), bx + 16, boxY + 74);
+
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.fillText(b.sub, bx + 16, boxY + 98);
+      ctx.restore();
+    });
+  }
 
   return canvas.toBuffer('image/png') as unknown as Buffer;
 }

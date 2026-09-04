@@ -8,13 +8,14 @@ import { SlashCommand } from '../../types/command';
 import { createEmbed } from '../../utils/embed';
 import { DEFAULT_COLORS } from '@priv/shared';
 import { CLAN_ROLE_ID } from '../../services/clanRole.service';
+import { registerService } from '../../services/register.service';
 import { createSayCard } from '../../utils/canvas';
 import { logger } from '../../utils/logger';
 
 export const sayCommand: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName('say')
-    .setDescription('Sunucudaki ses, üye, çevrimiçi ve klan istatistiklerini detaylıca sayar.')
+    .setDescription('Sunucudaki ses, üye, çevrimiçi, kız/erkek ve klan istatistiklerini detaylıca sayar.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
   cooldown: 5,
   async execute(interaction: ChatInputCommandInteraction) {
@@ -28,20 +29,59 @@ export const sayCommand: SlashCommand = {
     const guild = interaction.guild;
     const members = await guild.members.fetch().catch(() => guild.members.cache);
 
-    // 1. Ses İstatistikleri
+    // 0. Kayıt Rolleri & Cinsiyet Keşfi
+    const regSettings = registerService.autoConfigure(guild);
+    const maleRoleIds = new Set<string>();
+    const femaleRoleIds = new Set<string>();
+
+    if (regSettings.maleRoleId) maleRoleIds.add(regSettings.maleRoleId);
+    if (regSettings.femaleRoleId) femaleRoleIds.add(regSettings.femaleRoleId);
+
+    for (const [, role] of guild.roles.cache) {
+      const name = role.name.toLowerCase();
+      if (['erkek', 'boy', 'man'].some((k) => name.includes(k))) {
+        maleRoleIds.add(role.id);
+      } else if (['kadın', 'kadin', 'kız', 'kiz', 'girl', 'woman'].some((k) => name.includes(k))) {
+        femaleRoleIds.add(role.id);
+      }
+    }
+
+    // 1. Ses & Cinsiyet İstatistikleri
     let totalInVoice = 0;
     let voiceDeaf = 0;
     let voiceMute = 0;
     let voiceStreaming = 0;
     let voiceCamera = 0;
+    let voiceMale = 0;
+    let voiceFemale = 0;
+
+    let totalMale = 0;
+    let totalFemale = 0;
+    let totalUnregistered = 0;
 
     for (const [, m] of members) {
+      if (m.user.bot) continue;
+
+      const isMale = m.roles.cache.some((r) => maleRoleIds.has(r.id));
+      const isFemale = !isMale && m.roles.cache.some((r) => femaleRoleIds.has(r.id));
+      const isUnregistered = !isMale && !isFemale && (
+        (regSettings.unregisteredRoleId ? m.roles.cache.has(regSettings.unregisteredRoleId) : false) ||
+        m.roles.cache.some((r) => ['kayıtsız', 'kayitsiz', 'unregistered'].some((k) => r.name.toLowerCase().includes(k)))
+      );
+
+      if (isMale) totalMale++;
+      else if (isFemale) totalFemale++;
+      if (isUnregistered) totalUnregistered++;
+
       if (m.voice.channelId) {
         totalInVoice++;
         if (m.voice.selfDeaf || m.voice.serverDeaf) voiceDeaf++;
         if (m.voice.selfMute || m.voice.serverMute) voiceMute++;
         if (m.voice.streaming) voiceStreaming++;
         if (m.voice.selfVideo) voiceCamera++;
+
+        if (isMale) voiceMale++;
+        else if (isFemale) voiceFemale++;
       }
     }
 
@@ -61,7 +101,7 @@ export const sayCommand: SlashCommand = {
     const clanRole = guild.roles.cache.get(CLAN_ROLE_ID);
     const clanMemberCount = clanRole ? members.filter((m) => m.roles.cache.has(CLAN_ROLE_ID)).size : 0;
 
-    // 5. Canvas Kartı Oluştur
+    // 5. Canvas Kartı Oluştur (Kız & Erkek dahil 6 kutulu)
     let imageBuffer: Buffer | null = null;
     try {
       imageBuffer = await createSayCard({
@@ -70,14 +110,16 @@ export const sayCommand: SlashCommand = {
         onlineMembers: onlineMembers > 0 ? onlineMembers : Math.round(totalMembers * 0.4),
         voiceMembers: totalInVoice,
         boostCount,
+        maleCount: totalMale,
+        femaleCount: totalFemale,
       });
     } catch (canvasErr) {
       logger.error('[SAY] Canvas kartı oluşturulamadı:', canvasErr);
     }
 
     const embed = createEmbed({
-      title: `📊 ${guild.name} — Sunucu ve Ses Sayımı`,
-      description: `Yetkili canlı sayım paneli aşağıda detaylandırılmıştır:`,
+      title: `📊 ${guild.name} — Sunucu, Ses ve Cinsiyet Sayımı`,
+      description: `Yetkili canlı sayım ve üye dağılım paneli aşağıda detaylandırılmıştır:`,
       color: DEFAULT_COLORS.PRIMARY as any,
       thumbnail: guild.iconURL() || undefined,
       fields: [
@@ -85,16 +127,19 @@ export const sayCommand: SlashCommand = {
           name: '🎙️ Ses Kanalları Durumu',
           value:
             `>>> 🔊 **Toplam Sesteki Üye:** \`${totalInVoice}\` kişi\n` +
+            `♂️ **Sesteki Erkek:** \`${voiceMale}\` kişi | ♀️ **Sesteki Kız:** \`${voiceFemale}\` kişi\n` +
             `🔇 **Mikrofonu Kapalı:** \`${voiceMute}\` kişi\n` +
             `🎧 **Kulaklığı Kapalı:** \`${voiceDeaf}\` kişi\n` +
-            `🖥️ **Yayın Yapan:** \`${voiceStreaming}\` kişi\n` +
-            `📷 **Kamerası Açık:** \`${voiceCamera}\` kişi`,
+            `🖥️ **Yayın Yapan:** \`${voiceStreaming}\` kişi | 📷 **Kamerası Açık:** \`${voiceCamera}\` kişi`,
           inline: false,
         },
         {
-          name: '👥 Üye Durumu',
+          name: '👥 Üye & Cinsiyet Dağılımı',
           value:
             `>>> 👤 **Toplam Üye:** \`${totalMembers}\`\n` +
+            `♂️ **Erkek Üye:** \`${totalMale}\` kişi\n` +
+            `♀️ **Kız Üye:** \`${totalFemale}\` kişi\n` +
+            (totalUnregistered > 0 ? `❓ **Kayıtsız:** \`${totalUnregistered}\` kişi\n` : '') +
             `🧑 **İnsanlar:** \`${humanCount}\` | 🤖 **Botlar:** \`${botCount}\``,
           inline: true,
         },
@@ -102,7 +147,8 @@ export const sayCommand: SlashCommand = {
           name: '🚀 Takviye & Klan',
           value:
             `>>> 💎 **Takviye (Boost):** \`${boostCount}\` (Seviye ${boostTier})\n` +
-            `🛡️ **Klan Üyesi:** \`${clanMemberCount}\` kişi`,
+            `🛡️ **Klan Üyesi:** \`${clanMemberCount}\` kişi\n` +
+            `🟢 **Çevrim İçi:** \`${onlineMembers}\` kişi`,
           inline: true,
         },
       ],
