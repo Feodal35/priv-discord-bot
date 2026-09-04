@@ -52,6 +52,7 @@ export async function onReady(client: Client) {
       confessionChannelId: '1545496276576116878',
       confessionEnabled: true,
       welcomeChannelId: '1542620110882349162',
+      logChannelId: '1545497145379917954',
     }).catch(() => {});
   }
 

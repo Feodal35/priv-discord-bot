@@ -3,6 +3,9 @@ import { guildService } from './guild.service';
 import { createEmbed } from '../utils/embed';
 import { DEFAULT_COLORS, EMOJIS } from '@priv/shared';
 
+// Kullanıcının belirlediği sabit log kanalı ID'si
+export const LOG_CHANNEL_ID = '1545497145379917954';
+
 export type LogCategory =
   | 'MODERATION'
   | 'MESSAGE_DELETE'
@@ -11,6 +14,7 @@ export type LogCategory =
   | 'MEMBER_JOIN'
   | 'MEMBER_LEAVE'
   | 'ECONOMY'
+  | 'CLAN'
   | 'SYSTEM';
 
 export class LogService {
@@ -24,12 +28,13 @@ export class LogService {
   ) {
     try {
       const settings = await guildService.getGuildSettings(guildId);
-      if (!settings.logChannelId) return;
+      const targetChannelId = settings.logChannelId || LOG_CHANNEL_ID;
+      if (!targetChannelId) return;
 
-      const channel = (await client.channels.fetch(settings.logChannelId).catch(() => null)) as TextChannel | null;
+      const channel = (await client.channels.fetch(targetChannelId).catch(() => null)) as TextChannel | null;
       if (!channel) return;
 
-      let color: number = DEFAULT_COLORS.INFO;
+      let color: any = DEFAULT_COLORS.INFO;
       let icon: string = EMOJIS.INFO;
 
       switch (category) {
@@ -58,6 +63,14 @@ export class LogService {
           color = DEFAULT_COLORS.GOLD;
           icon = EMOJIS.COIN;
           break;
+        case 'CLAN':
+          color = 0x9b59b6;
+          icon = '🛡️';
+          break;
+        case 'SYSTEM':
+          color = DEFAULT_COLORS.PRIMARY;
+          icon = '⚙️';
+          break;
       }
 
       const embed = createEmbed({
@@ -65,7 +78,8 @@ export class LogService {
         description,
         color,
         fields,
-        footer: { text: `Kategori: ${category}` },
+        footer: { text: `Priv Denetim Kaydı • ${category}` },
+        timestamp: true,
       });
 
       await channel.send({ embeds: [embed] });

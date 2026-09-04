@@ -1,5 +1,6 @@
 import { Guild, GuildMember, Client } from 'discord.js';
 import { logger } from '../utils/logger';
+import { logService } from './log.service';
 
 // Kullanıcının belirttiği klan / guild rolü ID'si
 export const CLAN_ROLE_ID = '1543033008318316654';
@@ -89,6 +90,13 @@ export class ClanRoleService {
         logger.error(`[CLAN_ROLE] Rol eklenemedi (${member.user.tag}):`, err);
       });
       logger.info(`✅ [CLAN_ROLE] ${member.user.tag} klan rozetine sahip olduğu için rol verildi.`);
+      await logService.logEvent(
+        guild.id,
+        'CLAN',
+        'Klan / Guild Rolü Verildi',
+        `**Kullanıcı:** <@${member.id}> (${member.user.tag})\n**Rol:** <@&${role.id}>\n**Durum:** Resmi sunucu klanı profilde aktif.`,
+        member.client
+      ).catch(() => {});
       return 'ADDED';
     } else if (!hasClan && hasRole) {
       // Klanı yok ama rolü var (önceden alıp salmış) -> Rolü geri al!
@@ -96,6 +104,13 @@ export class ClanRoleService {
         logger.error(`[CLAN_ROLE] Rol kaldırılamadı (${member.user.tag}):`, err);
       });
       logger.warn(`❌ [CLAN_ROLE] ${member.user.tag} klan rozetini saldığı/bıraktığı için rolü kaldırıldı!`);
+      await logService.logEvent(
+        guild.id,
+        'CLAN',
+        'Klan / Guild Rolü Geri Alındı',
+        `**Kullanıcı:** <@${member.id}> (${member.user.tag})\n**Rol:** <@&${role.id}>\n**Sebep:** Kullanıcı sunucu klanını profilinden kaldırdı/salmış.`,
+        member.client
+      ).catch(() => {});
       return 'REMOVED';
     }
 
