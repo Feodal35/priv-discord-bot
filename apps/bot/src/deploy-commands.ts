@@ -4,6 +4,24 @@ import { commands } from './client';
 import { userContextMenus, messageContextMenus } from './interactions/contextMenus';
 import { logger } from './utils/logger';
 
+export async function clearGuildCommands(guildId: string) {
+  const token = config.DISCORD_TOKEN;
+  const clientId = config.DISCORD_CLIENT_ID;
+
+  if (!token || token === 'MISSING_DISCORD_TOKEN') return;
+  const rest = new REST({ version: '10' }).setToken(token);
+
+  try {
+    // Sunucuya özel kayıtlı komutları tamamen temizle (2 tane gözükmesini önler)
+    await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
+      body: [],
+    });
+    logger.info(`🧹 ${guildId} sunucusundaki eski özel komutlar temizlendi.`);
+  } catch (error) {
+    logger.error(`${guildId} sunucusundaki komutlar temizlenirken hata:`, error);
+  }
+}
+
 export async function deployCommands(guildId?: string) {
   const token = config.DISCORD_TOKEN;
   const clientId = config.DISCORD_CLIENT_ID;
@@ -20,20 +38,18 @@ export async function deployCommands(guildId?: string) {
   ];
 
   const allBodies = [...slashCommandBodies, ...contextMenuBodies];
-
   const rest = new REST({ version: '10' }).setToken(token);
 
   try {
-    logger.info(`🔄 ${allBodies.length} komut ve menü Discord API'ye yükleniyor...`);
-
     if (guildId) {
-      // Belirli bir sunucu için anlık yükleme (Geliştirme için hızlı)
+      // Sunucu özelinde komut yükleme
       await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
         body: allBodies,
       });
-      logger.info(`✅ Komutlar ${guildId} sunucusuna başarıyla yüklendi!`);
+      logger.info(`✅ Komutlar ${guildId} sunucusuna yüklendi.`);
     } else {
       // Global komut kaydı
+      logger.info(`🔄 ${allBodies.length} global komut ve menü Discord API'ye yükleniyor...`);
       await rest.put(Routes.applicationCommands(clientId), {
         body: allBodies,
       });

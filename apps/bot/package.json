@@ -14,6 +14,7 @@
     "@priv/config": "*",
     "@priv/database": "*",
     "discord.js": "^14.15.3",
+    "@discordjs/voice": "^0.17.0",
     "date-fns": "^3.6.0",
     "date-fns-tz": "^3.1.3",
     "@types/node": "^20.14.10",
