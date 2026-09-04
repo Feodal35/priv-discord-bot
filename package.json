@@ -22,7 +22,9 @@
     "lint": "npm run lint --workspaces --if-present"
   },
   "dependencies": {
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vite": "^5.3.1",
+    "@vitejs/plugin-react": "^4.3.1"
   },
   "keywords": [
     "discord-bot",
