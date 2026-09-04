@@ -1,0 +1,23 @@
+{
+  "name": "@priv/database",
+  "version": "1.0.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "generate": "prisma generate",
+    "push": "prisma db push",
+    "migrate": "prisma migrate dev",
+    "seed": "node dist/seed.js",
+    "build": "prisma generate && tsc",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.18.0",
+    "@priv/shared": "*",
+    "@priv/config": "*"
+  },
+  "devDependencies": {
+    "prisma": "^5.18.0",
+    "typescript": "^5.5.4"
+  }
+}

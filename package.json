@@ -1,0 +1,34 @@
+{
+  "name": "priv-discord-bot-ecosystem",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Özel Discord sunucuları için production-ready, modern ve Türkçe Discord botu, REST API ve Web Dashboard ekosistemi",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "start:bot": "npm run start -w apps/bot",
+    "dev:bot": "npm run dev -w apps/bot",
+    "start:api": "npm run start -w apps/api",
+    "dev:api": "npm run dev -w apps/api",
+    "dev:dashboard": "npm run dev -w apps/dashboard",
+    "db:generate": "npm run generate -w packages/database",
+    "db:push": "npm run push -w packages/database",
+    "db:seed": "npm run seed -w packages/database",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "keywords": [
+    "discord-bot",
+    "discordjs-v14",
+    "typescript",
+    "dashboard",
+    "react",
+    "priv-community",
+    "turkce"
+  ],
+  "author": "Priv Bot Team",
+  "license": "MIT"
+}

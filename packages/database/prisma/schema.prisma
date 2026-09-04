@@ -1,0 +1,432 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id // Discord User ID
+  username      String
+  discriminator String         @default("0")
+  avatar        String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  userGuilds    UserGuild[]
+  sentTransactions     EconomyTransaction[] @relation("SentTransactions")
+  receivedTransactions EconomyTransaction[] @relation("ReceivedTransactions")
+  inventory     Inventory[]
+  achievements  UserAchievement[]
+  quests        UserQuest[]
+  birthdays     Birthday[]
+  reminders     Reminder[]
+  voiceSessions VoiceSession[]
+  pollVotes     PollVote[]
+  moderationLogsTarget ModerationLog[] @relation("TargetUser")
+  moderationLogsMod    ModerationLog[] @relation("ModeratorUser")
+
+  @@map("users")
+}
+
+model Guild {
+  id               String         @id // Discord Guild ID
+  name             String
+  icon             String?
+  ownerId          String
+  isSetupComplete  Boolean        @default(false)
+  joinedAt         DateTime       @default(now())
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  settings         GuildSettings?
+  userGuilds       UserGuild[]
+  transactions     EconomyTransaction[]
+  shopItems        ShopItem[]
+  inventory        Inventory[]
+  userAchievements UserAchievement[]
+  quests           Quest[]
+  userQuests       UserQuest[]
+  tempVoiceChannels TemporaryVoiceChannel[]
+  voiceSessions    VoiceSession[]
+  birthdays        Birthday[]
+  reminders        Reminder[]
+  confessions      Confession[]
+  polls            Poll[]
+  memories         Memory[]
+  moderationLogs   ModerationLog[]
+  autoModRule      AutoModRule?
+
+  @@map("guilds")
+}
+
+model GuildSettings {
+  id                       String   @id @default(cuid())
+  guildId                  String   @unique
+  guild                    Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  // Markalama & Genel
+  botName                  String   @default("Priv")
+  embedColor               String   @default("#5865F2")
+  currencyName             String   @default("Coin")
+  currencyEmoji            String   @default("🪙")
+  timezone                 String   @default("Europe/Istanbul")
+
+  // Kanallar
+  welcomeChannelId         String?
+  leaveChannelId           String?
+  logChannelId             String?
+  confessionChannelId      String?
+  birthdayChannelId        String?
+  tempVoiceCategoryId      String?
+  tempVoiceCreateChannelId String?
+
+  // Roller
+  autoRoleId               String?
+  birthdayRoleId           String?
+  muteRoleId               String?
+
+  // Şablon Mesajlar
+  welcomeMessage           String   @default("👋 Hoş geldin {user}! Sunucuda artık {memberCount} kişiyiz. 🎉 İyi eğlenceler.")
+  leaveMessage             String   @default("👋 {username} sunucudan ayrıldı. Aramızda {memberCount} kişi kaldı.")
+
+  // Feature Flags
+  economyEnabled           Boolean  @default(true)
+  levelEnabled             Boolean  @default(true)
+  gamesEnabled             Boolean  @default(true)
+  voiceEnabled             Boolean  @default(true)
+  aiEnabled                Boolean  @default(false)
+  confessionEnabled        Boolean  @default(true)
+  autoModEnabled           Boolean  @default(true)
+
+  // Ekonomi & Seviye Yapılandırması
+  dailyReward              Int      @default(250)
+  workMinReward            Int      @default(50)
+  workMaxReward            Int      @default(200)
+  workCooldownMinutes      Int      @default(60)
+  dailyStreakBonus         Int      @default(50)
+  maxTransferAmount        Int      @default(100000)
+
+  updatedAt                DateTime @updatedAt
+
+  @@map("guild_settings")
+}
+
+model UserGuild {
+  id               String    @id @default(cuid())
+  userId           String
+  guildId          String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guild            Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  // XP & Seviye
+  xp               Int       @default(0)
+  level            Int       @default(1)
+  messageCount     Int       @default(0)
+  voiceSeconds     Int       @default(0)
+
+  // Ekonomi
+  coins            Int       @default(100)
+  bankCoins        Int       @default(0)
+  dailyStreak      Int       @default(0)
+  lastDailyClaim   DateTime?
+  lastWorkClaim    DateTime?
+
+  // Profil Özelleştirme
+  bio              String    @default("Priv sunucusunun değerli bir üyesi.")
+  title            String    @default("Yeni Üye")
+  badges           String    @default("[]") // JSON string of badge IDs/names
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([userId, guildId])
+  @@index([guildId, xp(sort: Desc)])
+  @@index([guildId, coins(sort: Desc)])
+  @@index([guildId, messageCount(sort: Desc)])
+  @@index([guildId, voiceSeconds(sort: Desc)])
+  @@map("user_guilds")
+}
+
+model EconomyTransaction {
+  id          String   @id @default(cuid())
+  guildId     String
+  fromUserId  String?
+  toUserId    String
+  amount      Int
+  type        String   // DAILY, WORK, TRANSFER, SHOP, QUEST, GAME, ADMIN
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  fromUser    User?    @relation("SentTransactions", fields: [fromUserId], references: [id], onDelete: SetNull)
+  toUser      User     @relation("ReceivedTransactions", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, createdAt(sort: Desc)])
+  @@map("economy_transactions")
+}
+
+model ShopItem {
+  id          String      @id @default(cuid())
+  guildId     String
+  name        String
+  description String
+  price       Int
+  type        String      // ROLE, CUSTOM_ROLE, BADGE, TITLE, COSMETIC, ITEM
+  roleId      String?
+  stock       Int         @default(-1) // -1 sınırsız
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+
+  guild       Guild       @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  inventory   Inventory[]
+
+  @@map("shop_items")
+}
+
+model Inventory {
+  id          String   @id @default(cuid())
+  guildId     String
+  userId      String
+  itemId      String
+  quantity    Int      @default(1)
+  purchasedAt DateTime @default(now())
+
+  guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item        ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@map("inventories")
+}
+
+model Achievement {
+  id          String            @id @default(cuid())
+  code        String            @unique
+  name        String
+  description String
+  icon        String            @default("🏆")
+  rarity      String            @default("COMMON") // COMMON, RARE, EPIC, LEGENDARY, MYTHIC
+  requirement String
+  rewardCoins Int               @default(100)
+  rewardXp    Int               @default(50)
+
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  guildId       String
+  userId        String
+  achievementId String
+  unlockedAt    DateTime    @default(now())
+
+  guild         Guild       @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId, achievementId])
+  @@map("user_achievements")
+}
+
+model Quest {
+  id           String      @id @default(cuid())
+  guildId      String?     // null ise sistem genel görevi
+  title        String
+  description  String
+  frequency    String      @default("DAILY") // DAILY, WEEKLY
+  type         String      // MESSAGE_COUNT, VOICE_TIME, PLAY_GAME, TRANSFER_COIN
+  targetAmount Int
+  rewardCoins  Int         @default(150)
+  rewardXp     Int         @default(100)
+  createdAt    DateTime    @default(now())
+
+  guild        Guild?      @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  userQuests   UserQuest[]
+
+  @@map("quests")
+}
+
+model UserQuest {
+  id            String    @id @default(cuid())
+  guildId       String
+  userId        String
+  questId       String
+  currentAmount Int       @default(0)
+  isCompleted   Boolean   @default(false)
+  isClaimed     Boolean   @default(false)
+  resetAt       DateTime
+
+  guild         Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quest         Quest     @relation(fields: [questId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId, questId, resetAt])
+  @@map("user_quests")
+}
+
+model TemporaryVoiceChannel {
+  id        String   @id @default(cuid())
+  guildId   String
+  channelId String   @unique
+  ownerId   String
+  isLocked  Boolean  @default(false)
+  userLimit Int      @default(0)
+  createdAt DateTime @default(now())
+
+  guild     Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("temporary_voice_channels")
+}
+
+model VoiceSession {
+  id              String    @id @default(cuid())
+  guildId         String
+  userId          String
+  channelId       String
+  joinedAt        DateTime  @default(now())
+  leftAt          DateTime?
+  durationSeconds Int       @default(0)
+
+  guild           Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, userId])
+  @@map("voice_sessions")
+}
+
+model Birthday {
+  id                  String   @id @default(cuid())
+  guildId             String
+  userId              String
+  day                 Int
+  month               Int
+  lastCelebratedYear  Int?
+
+  guild               Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([guildId, userId])
+  @@map("birthdays")
+}
+
+model Reminder {
+  id          String   @id @default(cuid())
+  guildId     String
+  userId      String
+  channelId   String?
+  remindAt    DateTime
+  message     String
+  isDm        Boolean  @default(false)
+  isCompleted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([isCompleted, remindAt])
+  @@map("reminders")
+}
+
+model Confession {
+  id               String   @id @default(cuid())
+  guildId          String
+  confessionNumber Int
+  content          String
+  authorHash       String   // Güvenli anonimleştirilmiş hash
+  messageId        String?
+  createdAt        DateTime @default(now())
+
+  guild            Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("confessions")
+}
+
+model Poll {
+  id          String     @id @default(cuid())
+  guildId     String
+  channelId   String
+  messageId   String     @unique
+  question    String
+  options     String     // JSON array of strings
+  isAnonymous Boolean    @default(false)
+  isClosed    Boolean    @default(false)
+  expiresAt   DateTime?
+  createdAt   DateTime   @default(now())
+
+  guild       Guild      @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  votes       PollVote[]
+
+  @@map("polls")
+}
+
+model PollVote {
+  id          String   @id @default(cuid())
+  pollId      String
+  userId      String
+  optionIndex Int
+  createdAt   DateTime @default(now())
+
+  poll        Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId])
+  @@map("poll_votes")
+}
+
+model Memory {
+  id            String   @id @default(cuid())
+  guildId       String
+  title         String
+  eventDate     DateTime
+  description   String
+  imageUrl      String?
+  involvedUsers String   @default("[]") // JSON string of user IDs
+  createdBy     String
+  createdAt     DateTime @default(now())
+
+  guild         Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, eventDate(sort: Desc)])
+  @@map("memories")
+}
+
+model ModerationLog {
+  id              String   @id @default(cuid())
+  guildId         String
+  targetUserId    String
+  moderatorId     String
+  action          String   // WARN, MUTE, TIMEOUT, KICK, BAN, CLEAR, LOCK, UNLOCK
+  reason          String?
+  durationSeconds Int?
+  createdAt       DateTime @default(now())
+
+  guild           Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  targetUser      User     @relation("TargetUser", fields: [targetUserId], references: [id], onDelete: Cascade)
+  moderator       User     @relation("ModeratorUser", fields: [moderatorId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, createdAt(sort: Desc)])
+  @@map("moderation_logs")
+}
+
+model AutoModRule {
+  id                     String   @id @default(cuid())
+  guildId                String   @unique
+  spamFilter             Boolean  @default(true)
+  floodFilter            Boolean  @default(true)
+  mentionSpamLimit       Int      @default(5)
+  linkFilter             Boolean  @default(false)
+  inviteFilter           Boolean  @default(true)
+  capsLimitPercent       Int      @default(70)
+  emojiLimit             Int      @default(8)
+  bannedWords            String   @default("[]") // JSON string of banned words
+  action                 String   @default("WARN") // WARN, TIMEOUT, DELETE, KICK, BAN
+  timeoutDurationSeconds Int      @default(300)
+
+  guild                  Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("automod_rules")
+}
