@@ -61,14 +61,17 @@ export async function onReady(client: Client) {
   // 5. Sabit ses kanalına otomatik 7/24 bağlan
   await connectToPersistentVoice(client);
 
-  // 6. Düzenli ses odası sağlık kontrolü (Her 30 saniyede bir kontrol et, düşerse tekrar bağlan)
+  // 6. 1543033008318316654 rolünü sunucudaki üyelere kontrol et ve senkronize et
+  syncAutoRoleForExistingMembers(client).catch(() => {});
+
+  // 7. Düzenli ses odası sağlık kontrolü (Her 30 saniyede bir kontrol et, düşerse tekrar bağlan)
   setInterval(() => {
     ensureVoiceConnection(client).catch((err) => {
       logger.error('Ses bağlantısı kontrol hatası:', err);
     });
   }, 30000);
 
-  logger.info(`✨ Tüm Priv servisleri, ses izleyicisi ve cron'lar hazır!`, { service: 'READY' });
+  logger.info(`✨ Tüm Priv servisleri, ses izleyicisi, oto-rol ve cron'lar hazır!`, { service: 'READY' });
 }
 
 export async function connectToPersistentVoice(client: Client) {
@@ -152,3 +155,41 @@ async function ensureVoiceConnection(client: Client) {
     }
   }
 }
+
+export const AUTO_ROLE_ID = '1543033008318316654';
+
+async function syncAutoRoleForExistingMembers(client: Client) {
+  try {
+    for (const [, guild] of client.guilds.cache) {
+      let role = guild.roles.cache.get(AUTO_ROLE_ID);
+      if (!role) {
+        role = await guild.roles.fetch(AUTO_ROLE_ID).catch(() => null) || undefined;
+      }
+      if (!role) continue;
+
+      const botMember = guild.members.me;
+      if (!botMember?.permissions.has('ManageRoles') || botMember.roles.highest.position <= role.position) {
+        continue;
+      }
+
+      // Üyeleri çekip rolü olmayanlara ekle
+      const members = await guild.members.fetch().catch(() => null);
+      if (!members) continue;
+
+      let givenCount = 0;
+      for (const [, member] of members) {
+        if (!member.user.bot && !member.roles.cache.has(role.id)) {
+          await member.roles.add(role).catch(() => {});
+          givenCount++;
+        }
+      }
+
+      if (givenCount > 0) {
+        logger.info(`👑 [OTO-ROL] ${guild.name} sunucusunda ${givenCount} üyeye ${role.name} rolü otomatik verildi.`, { service: 'AUTO_ROLE' });
+      }
+    }
+  } catch (err) {
+    logger.error('Mevcut üyelere otomatik rol senkronize edilirken hata:', err);
+  }
+}
+

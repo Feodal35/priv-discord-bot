@@ -1,55 +1,102 @@
-import { GuildMember, TextChannel } from 'discord.js';
+import { GuildMember, TextChannel, AttachmentBuilder } from 'discord.js';
 import { guildService } from '../services/guild.service';
 import { logService } from '../services/log.service';
 import { achievementService } from '../services/achievement.service';
-import { parsePlaceholders } from '@priv/shared';
 import { createEmbed } from '../utils/embed';
 import { DEFAULT_COLORS } from '@priv/shared';
+import { createWelcomeCard } from '../utils/canvas';
+import { logger } from '../utils/logger';
+
+// Kullanıcının belirttiği otomatik verilecek kalıcı rol ID'si
+export const AUTO_ROLE_ID = '1543033008318316654';
 
 export async function onGuildMemberAdd(member: GuildMember) {
   const guild = member.guild;
   const settings = await guildService.getGuildSettings(guild.id);
 
-  // 1. Karşılama Mesajı
-  if (settings.welcomeChannelId) {
-    const channel = (await guild.channels.fetch(settings.welcomeChannelId).catch(() => null)) as TextChannel | null;
-    if (channel) {
-      const welcomeText = parsePlaceholders(settings.welcomeMessage, {
-        user: `<@${member.id}>`,
-        username: member.user.username,
-        server: guild.name,
-        memberCount: guild.memberCount,
-      });
+  // 1. OTOMATİK ROL VERME (1543033008318316654)
+  try {
+    const roleToAssign = AUTO_ROLE_ID || settings.autoRoleId;
+    if (roleToAssign) {
+      let role = guild.roles.cache.get(roleToAssign);
+      if (!role) {
+        role = await guild.roles.fetch(roleToAssign).catch(() => null) || undefined;
+      }
+
+      if (role) {
+        const botMember = guild.members.me;
+        if (botMember?.permissions.has('ManageRoles') && botMember.roles.highest.position > role.position) {
+          await member.roles.add(role);
+          logger.info(`✅ [OTO-ROL] ${member.user.tag} kullanıcısına ${role.name} (${role.id}) rolü verildi.`);
+        } else {
+          logger.warn(`⚠️ [OTO-ROL] Botun rol verme yetkisi veya rol sırası yetersiz! Rol: ${role.name}`);
+        }
+      }
+    }
+  } catch (error) {
+    logger.error(`[OTO-ROL] Rol verilirken hata oluştu (${member.id}):`, error);
+  }
+
+  // 2. ULTRA KALİTELİ CANVAS HOŞ GELDİN KARTI
+  try {
+    let welcomeChannel: TextChannel | null = null;
+    if (settings.welcomeChannelId) {
+      welcomeChannel = (await guild.channels.fetch(settings.welcomeChannelId).catch(() => null)) as TextChannel | null;
+    }
+
+    // Eğer ayarlı kanal yoksa adı hoşgeldin, welcome, giriş veya genel olan kanalı dene
+    if (!welcomeChannel) {
+      welcomeChannel = guild.channels.cache.find(
+        (ch) => ch.isTextBased() && ['hoş-geldin', 'hosgeldin', 'welcome', 'giris-cikis', 'giriş-çıkış', 'genel-sohbet', 'chat'].includes(ch.name)
+      ) as TextChannel | null;
+    }
+
+    if (welcomeChannel) {
+      let imageBuffer: Buffer | null = null;
+      try {
+        imageBuffer = await createWelcomeCard({
+          avatarUrl: member.displayAvatarURL({ extension: 'png', size: 256 }),
+          username: member.user.username,
+          guildName: guild.name,
+          memberCount: guild.memberCount,
+        });
+      } catch (canvasErr) {
+        logger.error('[WELCOME] Canvas hoş geldin kartı oluşturulamadı:', canvasErr);
+      }
 
       const embed = createEmbed({
-        title: `👋 Hoş Geldin, ${member.user.username}!`,
-        description: welcomeText,
-        thumbnail: member.displayAvatarURL(),
-        color: DEFAULT_COLORS.SUCCESS,
-        footer: { text: `Sunucunun ${guild.memberCount}. üyesi olarak katıldın.` },
+        title: `🎉 ${member.user.username} Sunucumuza Katıldı!`,
+        description: `Hoş geldin <@${member.id}>! Seninle birlikte **${guild.memberCount}** kişi olduk.\nKuralları okumayı ve sohbet kanallarında tanışmayı unutma!`,
+        color: DEFAULT_COLORS.PRIMARY as any,
+        footer: { text: `Hesap Kuruluşu: ${new Date(member.user.createdTimestamp).toLocaleDateString('tr-TR')}` },
+        timestamp: false,
       });
 
-      await channel.send({ content: `<@${member.id}>`, embeds: [embed] }).catch(() => {});
+      if (imageBuffer) {
+        const attachment = new AttachmentBuilder(imageBuffer, { name: 'welcome.png' });
+        embed.setImage('attachment://welcome.png');
+        await welcomeChannel.send({ content: `<@${member.id}>`, embeds: [embed], files: [attachment] }).catch(() => {});
+      } else {
+        await welcomeChannel.send({ content: `<@${member.id}>`, embeds: [embed] }).catch(() => {});
+      }
     }
+  } catch (welcomeErr) {
+    logger.error('[WELCOME] Karşılama mesajı gönderilirken hata:', welcomeErr);
   }
 
-  // 2. Otomatik Rol Verme
-  if (settings.autoRoleId && guild.members.me?.permissions.has('ManageRoles')) {
-    const role = guild.roles.cache.get(settings.autoRoleId);
-    if (role && guild.members.me.roles.highest.position > role.position) {
-      await member.roles.add(role).catch(() => {});
-    }
-  }
+  // 3. İLK ADIM BAŞARIMI
+  try {
+    await achievementService.checkAndUnlock(guild.id, member.id, 'FIRST_STEP', member.client);
+  } catch { /* sessiz devam */ }
 
-  // 3. İlk Adım Başarımı
-  await achievementService.checkAndUnlock(guild.id, member.id, 'FIRST_STEP', member.client);
-
-  // 4. Denetim Logu
-  await logService.logEvent(
-    guild.id,
-    'MEMBER_JOIN',
-    'Yeni Üye Katıldı',
-    `**Kullanıcı:** <@${member.id}> (${member.user.tag})\n**Hesap Kuruluşu:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>\n**Toplam Üye:** ${guild.memberCount}`,
-    member.client
-  );
+  // 4. DENETİM & GÜVENLİK LOGU
+  try {
+    await logService.logEvent(
+      guild.id,
+      'MEMBER_JOIN',
+      'Yeni Üye Katıldı',
+      `**Kullanıcı:** <@${member.id}> (${member.user.tag})\n**ID:** \`${member.id}\`\n**Hesap Tarihi:** <t:${Math.floor(member.user.createdTimestamp / 1000)}:R>\n**Sunucu Toplamı:** ${guild.memberCount} üye`,
+      member.client
+    );
+  } catch { /* sessiz devam */ }
 }

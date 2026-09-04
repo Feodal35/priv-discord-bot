@@ -1053,3 +1053,139 @@ export async function createProfileCard(opts: {
 
   return canvas.toBuffer('image/png') as unknown as Buffer;
 }
+
+// ─────────────────────────────────────────────────────────────
+// WELCOME CARD  (750 × 280)
+// ─────────────────────────────────────────────────────────────
+export async function createWelcomeCard(opts: {
+  avatarUrl: string;
+  username: string;
+  guildName: string;
+  memberCount: number;
+}): Promise<Buffer> {
+  const CW = 750, CH = 280;
+  const canvas = createCanvas(CW, CH);
+  const ctx = canvas.getContext('2d');
+
+  // Deep dark gradient background
+  const bg = ctx.createLinearGradient(0, 0, CW, CH);
+  bg.addColorStop(0, '#090a16');
+  bg.addColorStop(0.5, '#13122c');
+  bg.addColorStop(1, '#090a16');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Decorative border
+  const borderGrad = ctx.createLinearGradient(0, 0, CW, 0);
+  borderGrad.addColorStop(0, '#5865F2');
+  borderGrad.addColorStop(0.5, '#9b59b6');
+  borderGrad.addColorStop(1, '#ff6b9d');
+  ctx.fillStyle = borderGrad;
+  ctx.fillRect(0, 0, CW, 4);
+
+  // Subtle grid dot pattern
+  ctx.fillStyle = 'rgba(255,255,255,0.025)';
+  for (let gx = 0; gx < CW; gx += 20) {
+    for (let gy = 0; gy < CH; gy += 20) {
+      ctx.fillRect(gx, gy, 1.5, 1.5);
+    }
+  }
+
+  // Glowing circle background behind avatar
+  const AVS = 120;
+  const AVX = 45;
+  const AVY = (CH - AVS) / 2;
+  const acx = AVX + AVS / 2;
+  const acy = AVY + AVS / 2;
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(155, 89, 182, 0.6)';
+  ctx.shadowBlur = 30;
+  ctx.beginPath();
+  ctx.arc(acx, acy, AVS / 2 + 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#1c1c38';
+  ctx.fill();
+  ctx.restore();
+
+  // Avatar image
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(acx, acy, AVS / 2, 0, Math.PI * 2);
+  ctx.clip();
+  try {
+    const buf = await fetchBuf(opts.avatarUrl.replace('.webp', '.png').split('?')[0] + '?size=256');
+    const img = await loadImage(buf);
+    ctx.drawImage(img, AVX, AVY, AVS, AVS);
+  } catch {
+    ctx.fillStyle = '#2b2b4e';
+    ctx.fillRect(AVX, AVY, AVS, AVS);
+  }
+  ctx.restore();
+
+  // Avatar border rings
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(acx, acy, AVS / 2 + 3, 0, Math.PI * 2);
+  const ringGrad = ctx.createLinearGradient(AVX, AVY, AVX + AVS, AVY + AVS);
+  ringGrad.addColorStop(0, '#ff6b9d');
+  ringGrad.addColorStop(0.5, '#9b59b6');
+  ringGrad.addColorStop(1, '#5865F2');
+  ctx.strokeStyle = ringGrad;
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  ctx.restore();
+
+  // Text panel coordinates
+  const TX = AVX + AVS + 35;
+
+  // Subtitle / Welcome greeting tag
+  ctx.save();
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillStyle = '#ff6b9d';
+  ctx.textBaseline = 'top';
+  ctx.fillText('✨ ARAMIZA BİRİ KATILDI', TX, 48);
+  ctx.restore();
+
+  // Username
+  ctx.save();
+  ctx.font = 'bold 32px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'top';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 10;
+  const displayUser = opts.username.length > 20 ? opts.username.substring(0, 18) + '...' : opts.username;
+  ctx.fillText(displayUser, TX, 74);
+  ctx.restore();
+
+  // Guild name
+  ctx.save();
+  ctx.font = '16px sans-serif';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+  ctx.textBaseline = 'top';
+  ctx.fillText(`${opts.guildName} sunucusuna hoş geldin!`, TX, 120);
+  ctx.restore();
+
+  // Member count pill
+  const pillW = 260, pillH = 38, pillY = 162;
+  ctx.save();
+  clipRoundRect(ctx, TX, pillY, pillW, pillH, 10);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  clipRoundRect(ctx, TX, pillY, pillW, pillH, 10);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillStyle = '#2ecc71';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`🎉 Seninle birlikte ${opts.memberCount} kişiyiz!`, TX + 16, pillY + pillH / 2);
+  ctx.restore();
+
+  return canvas.toBuffer('image/png') as unknown as Buffer;
+}
