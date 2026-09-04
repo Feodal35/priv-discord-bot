@@ -25,8 +25,8 @@ export const yardimCommand: SlashCommand = {
         { name: '💰 Ekonomi & Market', value: '`/bakiye`, `/günlük`, `/çalış`, `/gönder`, `/market`, `/envanter`, `/görev`', inline: false },
         { name: '🎮 Mini Oyunlar & Eğlence', value: '`/oyun xox`, `/oyun tkm`, `/oyun yazı-tura`, `/oyun zar`, `/ship`', inline: false },
         { name: '🎤 Ses & Dinamik Odalar', value: '`/git`, `/çek`, `/voice kilitle`, `/voice aç`, `/voice limit`, `/voice isim`', inline: false },
-        { name: '🛡️ Moderasyon & Güvenlik', value: '`/uyar`, `/sustur`, `/timeout`, `/at`, `/yasakla`, `/temizle`, `/kilitle`, `/aç`', inline: false },
-        { name: '⚙️ Sunucu & Araçlar', value: '`/kurulum`, `/ayarlar`, `/sunucu`, `/sıralama`, `/itiraf`, `/anket`, `/doğumgünü`, `/hatırlat`', inline: false },
+        { name: '🛡️ Moderasyon & Güvenlik', value: '`/sesgec`, `/uyar`, `/sustur`, `/timeout`, `/at`, `/yasakla`, `/temizle`, `/kilitle`, `/aç`', inline: false },
+        { name: '⚙️ Sunucu & Araçlar', value: '`/say`, `/kurulum`, `/ayarlar`, `/sunucu`, `/sıralama`, `/itiraf`, `/anket`, `/doğumgünü`, `/hatırlat`', inline: false },
       ],
       footer: { text: 'Detaylı komut açıklamaları için aşağıdaki menüyü kullanabilirsin.' },
     });

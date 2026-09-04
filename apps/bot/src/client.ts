@@ -33,6 +33,7 @@ import { itirafCommand } from './commands/utility/itiraf';
 import { anketCommand } from './commands/utility/anket';
 import { dogumgunuCommand } from './commands/utility/dogumgunu';
 import { hatirlatCommand } from './commands/utility/hatirlat';
+import { sayCommand } from './commands/utility/say';
 
 // Ses Komutları
 import { voiceCommand } from './commands/voice/voice';
@@ -48,6 +49,7 @@ import { yasaklaCommand } from './commands/moderation/yasakla';
 import { temizleCommand } from './commands/moderation/temizle';
 import { kilitleCommand } from './commands/moderation/kilitle';
 import { acCommand } from './commands/moderation/ac';
+import { sesgecCommand } from './commands/moderation/sesgec';
 
 // Yönetici Komutları
 import { kurulumCommand } from './commands/admin/kurulum';
@@ -94,6 +96,7 @@ const allCommands: SlashCommand[] = [
   anketCommand,
   dogumgunuCommand,
   hatirlatCommand,
+  sayCommand,
   voiceCommand,
   gitCommand,
   cekCommand,
@@ -105,6 +108,7 @@ const allCommands: SlashCommand[] = [
   temizleCommand,
   kilitleCommand,
   acCommand,
+  sesgecCommand,
   kurulumCommand,
   ayarlarCommand,
   guildMuafiyetCommand,
