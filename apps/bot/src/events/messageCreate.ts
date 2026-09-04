@@ -2,6 +2,8 @@ import { Message, TextChannel } from 'discord.js';
 import { autoModService } from '../services/automod.service';
 import { xpService } from '../services/xp.service';
 import { messageCacheService } from '../services/messageCache.service';
+import { guardService } from '../services/guard.service';
+import { wordGameService } from '../services/wordGame.service';
 
 // Kullanıcının belirttiği fotoğraf kanalı ID'si
 export const PHOTO_CHANNEL_ID = '1543271245779566703';
@@ -26,6 +28,19 @@ export async function onMessageCreate(message: Message) {
     if (hasImageAttachment || hasImageUrlInContent) {
       await message.react('❤️').catch(() => {});
     }
+  }
+
+  // 1.5. Guard Koruması (Anti-Spam / Flood & Reklam / Link Engelleme)
+  const isSpam = await guardService.handleSpamCheck(message);
+  if (isSpam) return;
+
+  const isLink = await guardService.handleLinkCheck(message);
+  if (isLink) return;
+
+  // 1.8. Kelime Türetmece Oyunu Kanalı
+  const isWordGame = await wordGameService.handleMessage(message);
+  if (isWordGame) {
+    // Kelime oyunu mesajı işlendi, normal akışa devam et (XP alabilir)
   }
 
   // 2. AutoMod Denetimi

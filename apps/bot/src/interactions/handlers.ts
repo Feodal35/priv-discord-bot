@@ -13,6 +13,8 @@ import {
   TextInputBuilder,
   TextInputStyle,
   GuildMember,
+  StringSelectMenuBuilder,
+  VoiceChannel,
 } from 'discord.js';
 import { userService } from '../services/user.service';
 import { achievementService } from '../services/achievement.service';
@@ -23,6 +25,10 @@ import { confessionService } from '../services/confession.service';
 import { gamesService } from '../services/games.service';
 import { guildService } from '../services/guild.service';
 import { registerService } from '../services/register.service';
+import { voiceService } from '../services/voice.service';
+import { giveawayService } from '../services/giveaway.service';
+import { blackjackService } from '../services/blackjack.service';
+import { economyService } from '../services/economy.service';
 import { createEmbed, createSuccessEmbed, createErrorEmbed, createWarningEmbed, createInfoEmbed } from '../utils/embed';
 import { DEFAULT_COLORS, EMOJIS, RARITY, RarityType, formatCurrency, formatHours, calculateShipPercentage } from '@priv/shared';
 import { createShipImage } from '../utils/canvas';
@@ -330,6 +336,282 @@ export async function handleButtonInteraction(interaction: ButtonInteraction) {
       });
     }
     return;
+  }
+
+  // -0.45. ÇEKİLİŞ KATIL BUTONU
+  if (customId.startsWith('giveaway_join_')) {
+    const giveawayId = customId.replace('giveaway_join_', '');
+    const member = (interaction.member as GuildMember) || (await guild.members.fetch(user.id).catch(() => null));
+    if (!member) {
+      await interaction.reply({ content: '❌ Kullanıcı bilgisi alınamadı.', ephemeral: true });
+      return;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+    const result = await giveawayService.toggleJoin(giveawayId, member, interaction.client);
+    await interaction.editReply({ content: result.message });
+    return;
+  }
+
+  // -0.42. BLACKJACK BUTONLARI (Hit / Stand)
+  if (customId.startsWith('bj_hit_') || customId.startsWith('bj_stand_')) {
+    const isHit = customId.startsWith('bj_hit_');
+    const gameId = isHit ? customId.replace('bj_hit_', '') : customId.replace('bj_stand_', '');
+
+    const game = blackjackService.getGame(gameId);
+    if (!game) {
+      await interaction.reply({ content: '❌ Bu oyunun süresi dolmuş veya bulunamadı.', ephemeral: true });
+      return;
+    }
+
+    if (game.userId !== user.id) {
+      await interaction.reply({ content: '❌ Bu oyun oturumu size ait değil!', ephemeral: true });
+      return;
+    }
+
+    if (game.isFinished) {
+      await interaction.reply({ content: '⚠️ Bu oyun zaten bitti.', ephemeral: true });
+      return;
+    }
+
+    if (isHit) {
+      const res = blackjackService.hit(gameId);
+      const pScore = blackjackService.calculateScore(res.game.playerCards);
+
+      if (res.game.isFinished) {
+        let winAmount = 0;
+        if (!res.busted) {
+          const dScore = blackjackService.calculateScore(res.game.dealerCards);
+          if (dScore > 21 || pScore > dScore) {
+            winAmount = res.game.bet * 2;
+            await economyService.modifyBalance(guild.id, user.id, winAmount, 'ADD', 'Blackjack Kazancı');
+          } else if (pScore === dScore) {
+            winAmount = res.game.bet;
+            await economyService.modifyBalance(guild.id, user.id, winAmount, 'ADD', 'Blackjack Beraberlik İadesi');
+          }
+        }
+
+        const embed = createEmbed({
+          title: '🃏 Blackjack (21) — Sonuç',
+          description:
+            `**Senin Elin:** ${blackjackService.formatHand(res.game.playerCards)} (\`${pScore}\`)\n` +
+            `**Krupiyenin Eli:** ${blackjackService.formatHand(res.game.dealerCards)} (\`${blackjackService.calculateScore(res.game.dealerCards)}\`)\n\n` +
+            `${res.game.statusText}` +
+            (winAmount > 0 ? `\n\n💰 **Kazanılan / İade:** \`+${formatCurrency(winAmount)} Coin\`` : ''),
+          color: res.busted ? DEFAULT_COLORS.DANGER : DEFAULT_COLORS.SUCCESS,
+        });
+
+        await interaction.update({ embeds: [embed], components: [] });
+      } else {
+        const dScore = blackjackService.calculateScore([res.game.dealerCards[0]]);
+        const embed = createEmbed({
+          title: '🃏 Blackjack (21)',
+          description:
+            `**Senin Elin:** ${blackjackService.formatHand(res.game.playerCards)} (\`${pScore}\`)\n` +
+            `**Krupiyenin Eli:** ${blackjackService.formatHand(res.game.dealerCards, true)} (\`${dScore} + ?\`)\n\n` +
+            `💰 **Mevcut Bahis:** \`${formatCurrency(res.game.bet)} Coin\`\n\n` +
+            `Kart çekmek için **Kart Çek (Hit)**, elinizde kalmak için **Pas (Stand)** butonuna basın!`,
+          color: DEFAULT_COLORS.PRIMARY,
+        });
+
+        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`bj_hit_${res.game.id}`)
+            .setLabel('Kart Çek (Hit)')
+            .setEmoji('🃏')
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId(`bj_stand_${res.game.id}`)
+            .setLabel('Pas (Stand)')
+            .setEmoji('🛑')
+            .setStyle(ButtonStyle.Secondary)
+        );
+
+        await interaction.update({ embeds: [embed], components: [row] });
+      }
+      return;
+    } else {
+      const res = blackjackService.stand(gameId);
+      const pScore = blackjackService.calculateScore(res.game.playerCards);
+      const dScore = blackjackService.calculateScore(res.game.dealerCards);
+
+      let winAmount = 0;
+      if (dScore > 21 || pScore > dScore) {
+        winAmount = res.game.bet * 2;
+        await economyService.modifyBalance(guild.id, user.id, winAmount, 'ADD', 'Blackjack Kazancı');
+      } else if (pScore === dScore) {
+        winAmount = res.game.bet;
+        await economyService.modifyBalance(guild.id, user.id, winAmount, 'ADD', 'Blackjack Beraberlik İadesi');
+      }
+
+      const embed = createEmbed({
+        title: '🃏 Blackjack (21) — Sonuç',
+        description:
+          `**Senin Elin:** ${blackjackService.formatHand(res.game.playerCards)} (\`${pScore}\`)\n` +
+          `**Krupiyenin Eli:** ${blackjackService.formatHand(res.game.dealerCards)} (\`${dScore}\`)\n\n` +
+          `${res.game.statusText}` +
+          (winAmount > 0 ? `\n\n💰 **Kazanılan / İade:** \`+${formatCurrency(winAmount)} Coin\`` : ''),
+        color: winAmount > 0 ? DEFAULT_COLORS.SUCCESS : DEFAULT_COLORS.DANGER,
+      });
+
+      await interaction.update({ embeds: [embed], components: [] });
+      return;
+    }
+  }
+
+  // -0.4. ÖZEL SES ODASI KONTROL PANELİ BUTONLARI
+  if (customId.startsWith('tempvoice_')) {
+    const parts = customId.split('_');
+    const action = parts[1]; // lock, limit, rename, kick, transfer
+    const channelId = parts[2];
+
+    const tempRecord = await voiceService.getTempChannel(channelId);
+    if (!tempRecord) {
+      await interaction.reply({
+        content: '❌ Bu geçici ses odası artık mevcut değil veya kapatılmış.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    if (tempRecord.ownerId !== user.id) {
+      await interaction.reply({
+        content: '❌ Bu odayı yalnızca **oda sahibi** yönetebilir!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const voiceChannel = (await guild.channels.fetch(channelId).catch(() => null)) as VoiceChannel | null;
+    if (!voiceChannel) {
+      await interaction.reply({
+        content: '❌ Ses kanalı bulunamadı.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    if (action === 'lock') {
+      const isCurrentlyLocked = tempRecord.isLocked;
+      const newLockedState = !isCurrentlyLocked;
+
+      await voiceChannel.permissionOverwrites.edit(guild.roles.everyone, {
+        Connect: newLockedState ? false : null,
+      });
+
+      await voiceService.updateTempChannel(channelId, { isLocked: newLockedState });
+
+      if (newLockedState) {
+        await interaction.reply({
+          content: '🔒 **Oda Kilitlendi!** Artık odaya yalnızca izin verdiğiniz kullanıcılar katılabilir.',
+          ephemeral: true,
+        });
+      } else {
+        await interaction.reply({
+          content: '🔓 **Oda Kilidi Açıldı!** Artık herkes odaya katılabilir.',
+          ephemeral: true,
+        });
+      }
+      return;
+    }
+
+    if (action === 'limit') {
+      const modal = new ModalBuilder()
+        .setCustomId(`tempvoice_modal_limit_${channelId}`)
+        .setTitle('Oda Kişi Limiti Ayarla');
+
+      const limitInput = new TextInputBuilder()
+        .setCustomId('user_limit')
+        .setLabel('Kişi Sayısı (0 sınırsız demektir)')
+        .setPlaceholder('0 - 99 arası bir sayı girin (Örn: 4)')
+        .setStyle(TextInputStyle.Short)
+        .setMinLength(1)
+        .setMaxLength(2)
+        .setRequired(true);
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(limitInput));
+      await interaction.showModal(modal);
+      return;
+    }
+
+    if (action === 'rename') {
+      const modal = new ModalBuilder()
+        .setCustomId(`tempvoice_modal_rename_${channelId}`)
+        .setTitle('Oda İsmini Değiştir');
+
+      const nameInput = new TextInputBuilder()
+        .setCustomId('new_name')
+        .setLabel('Yeni Oda İsmi')
+        .setPlaceholder('Örn: 🎮 Sohbet & Oyun')
+        .setStyle(TextInputStyle.Short)
+        .setMinLength(2)
+        .setMaxLength(30)
+        .setRequired(true);
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput));
+      await interaction.showModal(modal);
+      return;
+    }
+
+    if (action === 'kick') {
+      const otherMembers = voiceChannel.members.filter((m) => m.id !== user.id && !m.user.bot);
+      if (otherMembers.size === 0) {
+        await interaction.reply({
+          content: '⚠️ Odanızda sizden başka kimse bulunmuyor.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const select = new StringSelectMenuBuilder()
+        .setCustomId(`tempvoice_select_kick_${channelId}`)
+        .setPlaceholder('Odadan atmak istediğiniz üyeyi seçin')
+        .addOptions(
+          otherMembers.map((m) => ({
+            label: m.displayName.substring(0, 25),
+            value: m.id,
+            description: m.user.tag.substring(0, 50),
+          }))
+        );
+
+      const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+      await interaction.reply({
+        content: '🚫 Odadan atmak ve girişini engellemek istediğiniz üyeyi seçin:',
+        components: [row],
+        ephemeral: true,
+      });
+      return;
+    }
+
+    if (action === 'transfer') {
+      const otherMembers = voiceChannel.members.filter((m) => m.id !== user.id && !m.user.bot);
+      if (otherMembers.size === 0) {
+        await interaction.reply({
+          content: '⚠️ Odanızda devredeceğiniz başka bir üye bulunmuyor.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const select = new StringSelectMenuBuilder()
+        .setCustomId(`tempvoice_select_transfer_${channelId}`)
+        .setPlaceholder('Oda sahipliğini devredeceğiniz üyeyi seçin')
+        .addOptions(
+          otherMembers.map((m) => ({
+            label: m.displayName.substring(0, 25),
+            value: m.id,
+            description: m.user.tag.substring(0, 50),
+          }))
+        );
+
+      const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+      await interaction.reply({
+        content: '👑 Oda yöneticiliğini kime devretmek istiyorsunuz?',
+        components: [row],
+        ephemeral: true,
+      });
+      return;
+    }
   }
 
   // 0. SHIP BUTONLARI
@@ -855,10 +1137,110 @@ export async function handleModalInteraction(interaction: ModalSubmitInteraction
     await interaction.editReply({ content: `✅ ${result.message}` });
     return;
   }
+
+  // ÖZEL SES ODASI MODALLARI (Limit & Yeniden Adlandırma)
+  if (customId.startsWith('tempvoice_modal_limit_')) {
+    const channelId = customId.replace('tempvoice_modal_limit_', '');
+    const rawLimit = interaction.fields.getTextInputValue('user_limit').trim();
+    const limit = parseInt(rawLimit, 10);
+
+    if (isNaN(limit) || limit < 0 || limit > 99) {
+      await interaction.reply({
+        content: '❌ Lütfen 0 ile 99 arasında geçerli bir sayı girin.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const channel = (await guild.channels.fetch(channelId).catch(() => null)) as VoiceChannel | null;
+    if (channel) {
+      await channel.setUserLimit(limit);
+      await voiceService.updateTempChannel(channelId, { userLimit: limit });
+      await interaction.reply({
+        content: `👥 Oda kişi limiti başarıyla **${limit === 0 ? 'Sınırsız' : limit}** olarak ayarlandı!`,
+        ephemeral: true,
+      });
+    } else {
+      await interaction.reply({ content: '❌ Ses kanalı bulunamadı.', ephemeral: true });
+    }
+    return;
+  }
+
+  if (customId.startsWith('tempvoice_modal_rename_')) {
+    const channelId = customId.replace('tempvoice_modal_rename_', '');
+    const newName = interaction.fields.getTextInputValue('new_name').trim();
+
+    const channel = (await guild.channels.fetch(channelId).catch(() => null)) as VoiceChannel | null;
+    if (channel) {
+      await channel.setName(newName);
+      await interaction.reply({
+        content: `✏️ Oda adı başarıyla **${newName}** olarak değiştirildi!`,
+        ephemeral: true,
+      });
+    } else {
+      await interaction.reply({ content: '❌ Ses kanalı bulunamadı.', ephemeral: true });
+    }
+    return;
+  }
 }
 
 export async function handleSelectMenuInteraction(interaction: StringSelectMenuInteraction) {
   const { customId, values } = interaction;
+
+  // ÖZEL SES ODASI MENÜLERİ (At / Devret)
+  if (customId.startsWith('tempvoice_select_kick_')) {
+    const channelId = customId.replace('tempvoice_select_kick_', '');
+    const targetUserId = values[0];
+
+    const voiceChannel = (await interaction.guild?.channels.fetch(channelId).catch(() => null)) as VoiceChannel | null;
+    if (!voiceChannel) {
+      await interaction.reply({ content: '❌ Ses kanalı bulunamadı.', ephemeral: true });
+      return;
+    }
+
+    const targetMember = await interaction.guild?.members.fetch(targetUserId).catch(() => null);
+    if (targetMember) {
+      if (targetMember.voice.channelId === channelId) {
+        await targetMember.voice.disconnect('Oda sahibi tarafından odadan atıldı.').catch(() => {});
+      }
+      await voiceChannel.permissionOverwrites.edit(targetUserId, { Connect: false }).catch(() => {});
+      await interaction.reply({
+        content: `🚫 <@${targetUserId}> odadan atıldı ve odaya girişi engellendi!`,
+        ephemeral: true,
+      });
+    } else {
+      await interaction.reply({ content: '❌ Kullanıcı bulunamadı.', ephemeral: true });
+    }
+    return;
+  }
+
+  if (customId.startsWith('tempvoice_select_transfer_')) {
+    const channelId = customId.replace('tempvoice_select_transfer_', '');
+    const targetUserId = values[0];
+
+    const voiceChannel = (await interaction.guild?.channels.fetch(channelId).catch(() => null)) as VoiceChannel | null;
+    if (!voiceChannel) {
+      await interaction.reply({ content: '❌ Ses kanalı bulunamadı.', ephemeral: true });
+      return;
+    }
+
+    await voiceService.updateTempChannel(channelId, { ownerId: targetUserId });
+
+    await voiceChannel.permissionOverwrites.edit(targetUserId, {
+      ManageChannels: true,
+      MoveMembers: true,
+      MuteMembers: true,
+      DeafenMembers: true,
+      Connect: true,
+      Speak: true,
+    }).catch(() => {});
+
+    await interaction.reply({
+      content: `👑 Oda sahipliği başarıyla <@${targetUserId}> kullanıcısına devredildi!`,
+      ephemeral: true,
+    });
+    return;
+  }
 
   if (customId === 'help_category_select') {
     const selected = values[0];

@@ -330,121 +330,6 @@ export async function createShipImage(
   return canvas.toBuffer('image/png') as unknown as Buffer;
 }
 
-// ─────────────────────────────────────────────────────────────
-// LEVEL CARD
-// ─────────────────────────────────────────────────────────────
-export async function createLevelCard(
-  avatarUrl: string,
-  username: string,
-  level: number,
-  xp: number,
-  xpNeeded: number,
-  rank: number
-): Promise<Buffer> {
-  const CW = 600, CH = 130;
-  const canvas = createCanvas(CW, CH);
-  const ctx = canvas.getContext('2d');
-
-  // BG
-  const bg = ctx.createLinearGradient(0, 0, CW, CH);
-  bg.addColorStop(0, '#0d0d1a');
-  bg.addColorStop(1, '#1a1a35');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, CW, CH);
-
-  // Avatar circle
-  const AVS = 86, AVX = 20, AVY = (CH - AVS) / 2;
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(AVX + AVS / 2, AVY + AVS / 2, AVS / 2, 0, Math.PI * 2);
-  ctx.clip();
-  try {
-    const cleanUrl = avatarUrl.replace('.webp', '.png').split('?')[0] + '?size=128';
-    const buf = await fetchBuf(cleanUrl);
-    const img = await loadImage(buf);
-    ctx.drawImage(img, AVX, AVY, AVS, AVS);
-  } catch {
-    ctx.fillStyle = '#2b2b4e';
-    ctx.fillRect(AVX, AVY, AVS, AVS);
-  }
-  ctx.restore();
-
-  // Avatar ring
-  const ringColor = level >= 20 ? '#f39c12' : level >= 10 ? '#9b59b6' : '#5865F2';
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(AVX + AVS / 2, AVY + AVS / 2, AVS / 2 + 2.5, 0, Math.PI * 2);
-  ctx.strokeStyle = ringColor;
-  ctx.lineWidth = 3.5;
-  ctx.stroke();
-  ctx.restore();
-
-  const textX = AVX + AVS + 18;
-
-  // Username
-  ctx.save();
-  ctx.font = 'bold 20px sans-serif';
-  ctx.fillStyle = '#ffffff';
-  ctx.textBaseline = 'top';
-  ctx.fillText(username, textX, 18);
-  ctx.restore();
-
-  // Level
-  ctx.save();
-  ctx.font = '14px sans-serif';
-  ctx.fillStyle = '#a0a0c0';
-  ctx.textBaseline = 'top';
-  ctx.fillText(`Seviye ${level}`, textX, 44);
-  ctx.restore();
-
-  // Rank (top-right)
-  ctx.save();
-  ctx.font = 'bold 16px sans-serif';
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'top';
-  ctx.fillText(`#${rank}`, CW - 20, 18);
-  ctx.restore();
-
-  // XP text (top-right)
-  ctx.save();
-  ctx.font = '12px sans-serif';
-  ctx.fillStyle = '#a0a0c0';
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'top';
-  ctx.fillText(`${xp.toLocaleString('tr-TR')} / ${xpNeeded.toLocaleString('tr-TR')} XP`, CW - 20, 40);
-  ctx.restore();
-
-  // Progress bar
-  const bX = textX, bY = CH - 32, bW = CW - textX - 20, bH = 10, bR = 5;
-  ctx.save();
-  clipRoundRect(ctx, bX, bY, bW, bH, bR);
-  ctx.fillStyle = 'rgba(255,255,255,0.08)';
-  ctx.fill();
-  ctx.restore();
-
-  const ratio = Math.min(xp / xpNeeded, 1);
-  const pW = Math.max(bR * 2, bW * ratio);
-  const pg = ctx.createLinearGradient(bX, 0, bX + bW, 0);
-  pg.addColorStop(0, ringColor);
-  pg.addColorStop(1, '#7289da');
-  ctx.save();
-  clipRoundRect(ctx, bX, bY, pW, bH, bR);
-  ctx.fillStyle = pg;
-  ctx.fill();
-  ctx.restore();
-
-  // XP label
-  ctx.save();
-  ctx.font = '11px sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.45)';
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(`${xp.toLocaleString('tr-TR')} / ${xpNeeded.toLocaleString('tr-TR')} XP`, bX + bW, bY - 4);
-  ctx.restore();
-
-  return canvas.toBuffer('image/png') as unknown as Buffer;
-}
 
 // ─────────────────────────────────────────────────────────────
 // BALANCE CARD  (520 × 160)
@@ -1795,4 +1680,189 @@ export async function createSayCard(opts: SayCardOptions): Promise<Buffer> {
 
   return canvas.toBuffer('image/png') as unknown as Buffer;
 }
+
+// ─────────────────────────────────────────────────────────────
+// HD CANVAS RANK (SEVİYE) KARTI
+// ─────────────────────────────────────────────────────────────
+
+export async function createLevelCard(
+  avatarUrl: string,
+  username: string,
+  level: number,
+  xp: number,
+  xpNeeded: number,
+  rank: number
+): Promise<Buffer> {
+  const cardW = 800;
+  const cardH = 240;
+  const canvas = createCanvas(cardW, cardH);
+  const ctx = canvas.getContext('2d');
+
+  // 1. Arka Plan & Çerçeve
+  ctx.save();
+  clipRoundRect(ctx, 0, 0, cardW, cardH, 20);
+  const bgGrad = ctx.createLinearGradient(0, 0, cardW, cardH);
+  bgGrad.addColorStop(0, '#0f111a');
+  bgGrad.addColorStop(0.5, '#141724');
+  bgGrad.addColorStop(1, '#0b0c13');
+  ctx.fillStyle = bgGrad;
+  ctx.fill();
+
+  // Dış neon çerçeve
+  ctx.strokeStyle = 'rgba(88, 101, 242, 0.35)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
+
+  // Dekoratif arka plan ışık huzmeleri
+  ctx.save();
+  const glow1 = ctx.createRadialGradient(120, 120, 10, 120, 120, 180);
+  glow1.addColorStop(0, 'rgba(88, 101, 242, 0.25)');
+  glow1.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow1;
+  ctx.fillRect(0, 0, 300, cardH);
+
+  const glow2 = ctx.createRadialGradient(700, 50, 10, 700, 50, 200);
+  glow2.addColorStop(0, 'rgba(155, 89, 182, 0.2)');
+  glow2.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow2;
+  ctx.fillRect(500, 0, 300, cardH);
+  ctx.restore();
+
+  // 2. Avatar
+  const avX = 45;
+  const avY = 45;
+  const avSize = 150;
+  const avRadius = avSize / 2;
+  const avCenterX = avX + avRadius;
+  const avCenterY = avY + avRadius;
+
+  try {
+    const avBuf = await fetchBuf(avatarUrl);
+    const avImg = await loadImage(avBuf);
+
+    // Neon halka arkası
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avCenterX, avCenterY, avRadius + 5, 0, Math.PI * 2);
+    const ringGrad = ctx.createLinearGradient(avX, avY, avX + avSize, avY + avSize);
+    ringGrad.addColorStop(0, '#5865F2');
+    ringGrad.addColorStop(1, '#9B59B6');
+    ctx.strokeStyle = ringGrad;
+    ctx.lineWidth = 4;
+    ctx.shadowColor = '#5865F2';
+    ctx.shadowBlur = 12;
+    ctx.stroke();
+    ctx.restore();
+
+    // Avatar resmi
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avCenterX, avCenterY, avRadius, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(avImg, avX, avY, avSize, avSize);
+    ctx.restore();
+  } catch (err) {
+    // Avatar yüklenemezse fallback daire
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avCenterX, avCenterY, avRadius, 0, Math.PI * 2);
+    ctx.fillStyle = '#2b2d42';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 3. Kullanıcı Bilgisi (Emoji temizleme)
+  const cleanName = username.replace(/[^\p{L}\p{N}\p{P}\p{Z}^$\n]/gu, '').trim() || 'Kullanici';
+
+  ctx.save();
+  ctx.font = 'bold 30px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(cleanName.length > 18 ? cleanName.substring(0, 18) + '...' : cleanName, 230, 80);
+
+  ctx.font = '14px sans-serif';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+  ctx.fillText('Vip Metro Topluluk Üyesi', 230, 105);
+  ctx.restore();
+
+  // 4. Rozetler (Sağ Üst: RANK & LEVEL)
+  // Rank Rozeti
+  const rankText = `RANK #${rank}`;
+  ctx.save();
+  clipRoundRect(ctx, 510, 48, 120, 36, 10);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(241, 196, 15, 0.4)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.font = 'bold 15px sans-serif';
+  ctx.fillStyle = '#f1c40f'; // Altın sarısı
+  ctx.textAlign = 'center';
+  ctx.fillText(rankText, 570, 72);
+  ctx.restore();
+
+  // Level Rozeti
+  const levelText = `LEVEL ${level}`;
+  ctx.save();
+  clipRoundRect(ctx, 645, 48, 115, 36, 10);
+  const lvlGrad = ctx.createLinearGradient(645, 48, 760, 84);
+  lvlGrad.addColorStop(0, '#5865F2');
+  lvlGrad.addColorStop(1, '#3b47c7');
+  ctx.fillStyle = lvlGrad;
+  ctx.fill();
+
+  ctx.font = 'bold 15px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.fillText(levelText, 702, 72);
+  ctx.restore();
+
+  // 5. XP İlerleme Çubuğu
+  const barX = 230;
+  const barY = 155;
+  const barW = 530;
+  const barH = 24;
+  const barR = 12;
+
+  const progress = Math.min(1, Math.max(0, xp / (xpNeeded || 1)));
+  const percent = Math.round(progress * 100);
+
+  // XP Metni
+  ctx.save();
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('XP İlerlemesi', barX, barY - 12);
+
+  ctx.font = '14px sans-serif';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+  ctx.textAlign = 'right';
+  ctx.fillText(`${xp.toLocaleString('tr-TR')} / ${xpNeeded.toLocaleString('tr-TR')} XP (%${percent})`, barX + barW, barY - 12);
+  ctx.restore();
+
+  // Bar Arka Planı
+  ctx.save();
+  clipRoundRect(ctx, barX, barY, barW, barH, barR);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.fill();
+
+  // Bar Dolu Kısım
+  if (progress > 0) {
+    const fillW = Math.max(barR * 2, barW * progress);
+    clipRoundRect(ctx, barX, barY, fillW, barH, barR);
+    const fillGrad = ctx.createLinearGradient(barX, barY, barX + fillW, barY);
+    fillGrad.addColorStop(0, '#5865F2');
+    fillGrad.addColorStop(0.6, '#9B59B6');
+    fillGrad.addColorStop(1, '#2ecc71');
+    ctx.fillStyle = fillGrad;
+    ctx.shadowColor = '#2ecc71';
+    ctx.shadowBlur = 8;
+    ctx.fill();
+  }
+  ctx.restore();
+
+  return canvas.toBuffer('image/png') as unknown as Buffer;
+}
+
 

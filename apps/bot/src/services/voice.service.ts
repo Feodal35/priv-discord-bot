@@ -1,7 +1,18 @@
 import { prisma } from '@priv/database';
-import { VoiceState, ChannelType, PermissionFlagsBits, Client, VoiceChannel } from 'discord.js';
+import {
+  VoiceState,
+  ChannelType,
+  PermissionFlagsBits,
+  Client,
+  VoiceChannel,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from 'discord.js';
 import { guildService } from './guild.service';
 import { xpService } from './xp.service';
+import { createEmbed } from '../utils/embed';
+import { DEFAULT_COLORS } from '@priv/shared';
 
 export class VoiceService {
   // Aktif ses oturumları (guildId-userId -> { channelId, joinedAt })
@@ -126,10 +137,76 @@ export class VoiceService {
           ownerId: member.id,
         },
       });
+
+      // Ses kanalının dahili metin sohbetine oda yönetim panelini gönder
+      const embed = createEmbed({
+        title: `🎛️ Özel Ses Odası Yönetim Paneli`,
+        description:
+          `Hoş geldin <@${member.id}>! Sana özel ses odan başarıyla oluşturuldu.\n\n` +
+          `Aşağıdaki butonları kullanarak odanı dilediğin gibi yönetebilirsin:\n` +
+          `• **🔒 Kilitle / Aç:** Odayı kilitleyerek başkalarının girişini engeller.\n` +
+          `• **👥 Kişi Limiti:** Odaya girebilecek maksimum kişi sayısını ayarlar.\n` +
+          `• **✏️ İsim Değiştir:** Odanın görünen adını günceller.\n` +
+          `• **🚫 Odadan At:** İstemediğin bir kullanıcıyı odadan atar.\n` +
+          `• **👑 Odayı Devret:** Odanın yöneticiliğini odadaki başka bir üyeye aktarır.`,
+        color: 0x9b59b6,
+      });
+      embed.setFooter({ text: 'Vip Metro • Özel Ses Yöneticisi' });
+
+      const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`tempvoice_lock_${channel.id}`)
+          .setLabel('Kilitle / Aç')
+          .setEmoji('🔒')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`tempvoice_limit_${channel.id}`)
+          .setLabel('Kişi Limiti')
+          .setEmoji('👥')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`tempvoice_rename_${channel.id}`)
+          .setLabel('İsim Değiştir')
+          .setEmoji('✏️')
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`tempvoice_kick_${channel.id}`)
+          .setLabel('Odadan At')
+          .setEmoji('🚫')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`tempvoice_transfer_${channel.id}`)
+          .setLabel('Odayı Devret')
+          .setEmoji('👑')
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await channel.send({
+        content: `<@${member.id}>`,
+        embeds: [embed],
+        components: [row1, row2],
+      }).catch(() => {});
     } catch (error) {
       console.error('[HATA] Geçici ses kanalı oluşturulamadı:', error);
     }
   }
+
+  public async getTempChannel(channelId: string) {
+    return prisma.temporaryVoiceChannel.findUnique({
+      where: { channelId },
+    });
+  }
+
+  public async updateTempChannel(channelId: string, data: { ownerId?: string; isLocked?: boolean; userLimit?: number }) {
+    return prisma.temporaryVoiceChannel.update({
+      where: { channelId },
+      data,
+    });
+  }
+
 
   public async cleanStaleTempChannels(client: Client) {
     const channels = await prisma.temporaryVoiceChannel.findMany();

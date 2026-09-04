@@ -1,5 +1,6 @@
-import { Client, GatewayIntentBits, Collection, Partials } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, Partials, AuditLogEvent } from 'discord.js';
 import { SlashCommand } from './types/command';
+import { guardService } from './services/guard.service';
 
 // Sosyal Komutlar
 import { profilCommand } from './commands/social/profil';
@@ -24,6 +25,9 @@ import { gorevCommand } from './commands/economy/gorev';
 // Oyun Komutları
 import { oyunCommand } from './commands/games/oyun';
 import { shipCommand } from './commands/games/ship';
+import { blackjackCommand } from './commands/games/blackjack';
+import { ruletCommand } from './commands/games/rulet';
+import { kelimeOyunCommand } from './commands/games/kelimeOyun';
 
 // Araç Komutları
 import { yardimCommand } from './commands/utility/yardim';
@@ -35,6 +39,7 @@ import { dogumgunuCommand } from './commands/utility/dogumgunu';
 import { hatirlatCommand } from './commands/utility/hatirlat';
 import { sayCommand } from './commands/utility/say';
 import { rolPanelCommand } from './commands/utility/rolPanel';
+import { cekilisCommand } from './commands/utility/cekilis';
 
 // Ses Komutları
 import { voiceCommand } from './commands/voice/voice';
@@ -98,6 +103,9 @@ const allCommands: SlashCommand[] = [
   gorevCommand,
   oyunCommand,
   shipCommand,
+  blackjackCommand,
+  ruletCommand,
+  kelimeOyunCommand,
   yardimCommand,
   sunucuCommand,
   siralamaCommand,
@@ -107,6 +115,7 @@ const allCommands: SlashCommand[] = [
   hatirlatCommand,
   sayCommand,
   rolPanelCommand,
+  cekilisCommand,
   voiceCommand,
   gitCommand,
   cekCommand,
@@ -142,6 +151,7 @@ export function createDiscordClient(): Client {
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildVoiceStates,
+      GatewayIntentBits.GuildModeration,
     ],
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User],
   });
@@ -157,5 +167,25 @@ export function createDiscordClient(): Client {
   client.on('messageDelete', onMessageDelete);
   client.on('messageUpdate', onMessageUpdate);
 
+  // Sağ Tık Toplu Moderasyon (Mass Action) Guard Koruması
+  client.on('guildAuditLogEntryCreate', async (entry, guild) => {
+    if (!entry.executorId) return;
+    if (
+      entry.action === AuditLogEvent.MemberBanAdd ||
+      entry.action === AuditLogEvent.MemberKick ||
+      entry.action === AuditLogEvent.RoleDelete ||
+      entry.action === AuditLogEvent.ChannelDelete
+    ) {
+      let actionName = 'Moderasyon Eylemi';
+      if (entry.action === AuditLogEvent.MemberBanAdd) actionName = 'Yasaklama (Ban)';
+      else if (entry.action === AuditLogEvent.MemberKick) actionName = 'Sunucudan Atma (Kick)';
+      else if (entry.action === AuditLogEvent.RoleDelete) actionName = 'Rol Silme';
+      else if (entry.action === AuditLogEvent.ChannelDelete) actionName = 'Kanal Silme';
+
+      await guardService.handleMassActionGuard(guild, entry.executorId, actionName, client);
+    }
+  });
+
   return client;
 }
+

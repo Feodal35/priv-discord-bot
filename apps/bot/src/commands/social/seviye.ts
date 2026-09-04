@@ -44,7 +44,7 @@ export const seviyeCommand: SlashCommand = {
       description: `**Seviye ${profile.level}** · **#${profile.rank}** Sırada\n**${formatCurrency(profile.xp)}** / **${formatCurrency(profile.xpNeeded)}** XP\n\n_Mesaj yazarak ve ses kanalında vakit geçirerek XP kazan!_`,
       color: DEFAULT_COLORS.PRIMARY as any,
       thumbnail: imageBuffer ? undefined : profile.avatarUrl,
-      footer: { text: `Priv Bot • ${profile.displayName}` },
+      footer: { text: `Vip Metro • ${profile.displayName}` },
       timestamp: false,
     });
 
