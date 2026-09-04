@@ -3,6 +3,7 @@ import { guildService } from '../services/guild.service';
 import { logService } from '../services/log.service';
 import { achievementService } from '../services/achievement.service';
 import { clanRoleService } from '../services/clanRole.service';
+import { registerService } from '../services/register.service';
 import { createEmbed } from '../utils/embed';
 import { DEFAULT_COLORS } from '@priv/shared';
 import { createWelcomeCard } from '../utils/canvas';
@@ -22,51 +23,61 @@ export async function onGuildMemberAdd(member: GuildMember) {
     logger.error(`[CLAN_ROLE] Yeni üye kontrolünde hata (${member.id}):`, error);
   }
 
-  // 2. ULTRA KALİTELİ CANVAS HOŞ GELDİN KARTI
+  // 2. KAYIT SİSTEMİ VEYA GENEL HOŞ GELDİN KARTI
   try {
-    let welcomeChannel: TextChannel | null = null;
-    if (settings.welcomeChannelId) {
-      welcomeChannel = (await guild.channels.fetch(settings.welcomeChannelId).catch(() => null)) as TextChannel | null;
+    const registerSettings = registerService.getSettings(guild.id);
+    let handledByRegister = false;
+
+    if (registerSettings.enabled && registerSettings.registerChannelId) {
+      handledByRegister = await registerService.sendWelcomeCard(member);
     }
 
-    // 1542620110882349162 (Ana Sohbet) veya isimden bul
-    if (!welcomeChannel) {
-      welcomeChannel = (await guild.channels.fetch('1542620110882349162').catch(() => null)) as TextChannel | null;
-    }
-
-    if (!welcomeChannel) {
-      welcomeChannel = guild.channels.cache.find(
-        (ch) => ch.isTextBased() && ['sohbet', 'hoş-geldin', 'hosgeldin', 'welcome', 'giris-cikis', 'giriş-çıkış', 'genel-sohbet', 'chat'].includes(ch.name)
-      ) as TextChannel | null;
-    }
-
-    if (welcomeChannel) {
-      let imageBuffer: Buffer | null = null;
-      try {
-        imageBuffer = await createWelcomeCard({
-          avatarUrl: member.displayAvatarURL({ extension: 'png', size: 256 }),
-          username: member.user.username,
-          guildName: guild.name,
-          memberCount: guild.memberCount,
-        });
-      } catch (canvasErr) {
-        logger.error('[WELCOME] Canvas hoş geldin kartı oluşturulamadı:', canvasErr);
+    // Kayıt sistemi devrede değilse normal Canvas hoş geldin kartını gönder
+    if (!handledByRegister) {
+      let welcomeChannel: TextChannel | null = null;
+      if (settings.welcomeChannelId) {
+        welcomeChannel = (await guild.channels.fetch(settings.welcomeChannelId).catch(() => null)) as TextChannel | null;
       }
 
-      const embed = createEmbed({
-        title: `🎉 ${member.user.username} Sunucumuza Katıldı!`,
-        description: `Hoş geldin <@${member.id}>! Seninle birlikte **${guild.memberCount}** kişi olduk.\nKuralları okumayı ve sohbet kanallarında tanışmayı unutma!`,
-        color: DEFAULT_COLORS.PRIMARY as any,
-        footer: { text: `Hesap Kuruluşu: ${new Date(member.user.createdTimestamp).toLocaleDateString('tr-TR')}` },
-        timestamp: false,
-      });
+      // 1542620110882349162 (Ana Sohbet) veya isimden bul
+      if (!welcomeChannel) {
+        welcomeChannel = (await guild.channels.fetch('1542620110882349162').catch(() => null)) as TextChannel | null;
+      }
 
-      if (imageBuffer) {
-        const attachment = new AttachmentBuilder(imageBuffer, { name: 'welcome.png' });
-        embed.setImage('attachment://welcome.png');
-        await welcomeChannel.send({ content: `<@${member.id}>`, embeds: [embed], files: [attachment] }).catch(() => {});
-      } else {
-        await welcomeChannel.send({ content: `<@${member.id}>`, embeds: [embed] }).catch(() => {});
+      if (!welcomeChannel) {
+        welcomeChannel = guild.channels.cache.find(
+          (ch) => ch.isTextBased() && ['sohbet', 'hoş-geldin', 'hosgeldin', 'welcome', 'giris-cikis', 'giriş-çıkış', 'genel-sohbet', 'chat'].includes(ch.name)
+        ) as TextChannel | null;
+      }
+
+      if (welcomeChannel) {
+        let imageBuffer: Buffer | null = null;
+        try {
+          imageBuffer = await createWelcomeCard({
+            avatarUrl: member.displayAvatarURL({ extension: 'png', size: 256 }),
+            username: member.user.username,
+            guildName: guild.name,
+            memberCount: guild.memberCount,
+          });
+        } catch (canvasErr) {
+          logger.error('[WELCOME] Canvas hoş geldin kartı oluşturulamadı:', canvasErr);
+        }
+
+        const embed = createEmbed({
+          title: `🎉 ${member.user.username} Sunucumuza Katıldı!`,
+          description: `Hoş geldin <@${member.id}>! Seninle birlikte **${guild.memberCount}** kişi olduk.\nKuralları okumayı ve sohbet kanallarında tanışmayı unutma!`,
+          color: DEFAULT_COLORS.PRIMARY as any,
+          footer: { text: `Hesap Kuruluşu: ${new Date(member.user.createdTimestamp).toLocaleDateString('tr-TR')}` },
+          timestamp: false,
+        });
+
+        if (imageBuffer) {
+          const attachment = new AttachmentBuilder(imageBuffer, { name: 'welcome.png' });
+          embed.setImage('attachment://welcome.png');
+          await welcomeChannel.send({ content: `<@${member.id}>`, embeds: [embed], files: [attachment] }).catch(() => {});
+        } else {
+          await welcomeChannel.send({ content: `<@${member.id}>`, embeds: [embed] }).catch(() => {});
+        }
       }
     }
   } catch (welcomeErr) {

@@ -9,6 +9,10 @@ import {
   PermissionFlagsBits,
   TextChannel,
   AttachmentBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  GuildMember,
 } from 'discord.js';
 import { userService } from '../services/user.service';
 import { achievementService } from '../services/achievement.service';
@@ -18,6 +22,7 @@ import { pollService } from '../services/poll.service';
 import { confessionService } from '../services/confession.service';
 import { gamesService } from '../services/games.service';
 import { guildService } from '../services/guild.service';
+import { registerService } from '../services/register.service';
 import { createEmbed, createSuccessEmbed, createErrorEmbed, createWarningEmbed, createInfoEmbed } from '../utils/embed';
 import { DEFAULT_COLORS, EMOJIS, RARITY, RarityType, formatCurrency, formatHours, calculateShipPercentage } from '@priv/shared';
 import { createShipImage } from '../utils/canvas';
@@ -26,6 +31,43 @@ import { getShipComment, generateShipName } from '../commands/games/ship';
 export async function handleButtonInteraction(interaction: ButtonInteraction) {
   const { customId, user, guild } = interaction;
   if (!guild) return;
+
+  // -1. KAYIT SİSTEMİ BUTONLARI (Erkek / Kız Kayıt)
+  if (customId.startsWith('reg_male_') || customId.startsWith('reg_female_')) {
+    const member = interaction.member as GuildMember;
+    if (!registerService.isStaff(member)) {
+      await interaction.reply({
+        content: '❌ Bu işlemi gerçekleştirmek için **Kayıt Yetkilisi** olmalısınız!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const isMale = customId.startsWith('reg_male_');
+    const targetUserId = isMale ? customId.replace('reg_male_', '') : customId.replace('reg_female_', '');
+    const genderKey = isMale ? 'male' : 'female';
+    const genderTitle = isMale ? '♂️ Erkek Kayıt' : '♀️ Kız Kayıt';
+
+    // Modal aç (KESİNLİKLE YAŞ YOK, SADECE İSİM!)
+    const modal = new ModalBuilder()
+      .setCustomId(`reg_modal_${genderKey}_${targetUserId}`)
+      .setTitle(genderTitle);
+
+    const nameInput = new TextInputBuilder()
+      .setCustomId('register_name')
+      .setLabel('Kullanıcı İsmi (Nick)')
+      .setPlaceholder(isMale ? 'Örn: Ahmet' : 'Örn: Ayşe')
+      .setStyle(TextInputStyle.Short)
+      .setMinLength(2)
+      .setMaxLength(30)
+      .setRequired(true);
+
+    const actionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput);
+    modal.addComponents(actionRow);
+
+    await interaction.showModal(modal);
+    return;
+  }
 
   // 0. SHIP BUTONLARI
   if (customId.startsWith('ship_retry_') || customId.startsWith('ship_swap_')) {
@@ -435,6 +477,46 @@ export async function handleButtonInteraction(interaction: ButtonInteraction) {
 export async function handleModalInteraction(interaction: ModalSubmitInteraction) {
   const { customId, user, guild } = interaction;
   if (!guild) return;
+
+  // KAYIT MODALI (Erkek / Kız)
+  if (customId.startsWith('reg_modal_')) {
+    const parts = customId.split('_'); // reg, modal, male/female, targetUserId
+    const genderKey = parts[2];
+    const targetUserId = parts[3];
+    const name = interaction.fields.getTextInputValue('register_name');
+
+    const staffMember = interaction.member as GuildMember;
+    if (!registerService.isStaff(staffMember)) {
+      await interaction.reply({
+        content: '❌ Bu işlemi gerçekleştirmek için **Kayıt Yetkilisi** olmalısınız!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const targetMember = await guild.members.fetch(targetUserId).catch(() => null);
+    if (!targetMember) {
+      await interaction.reply({
+        content: '❌ Kaydedilecek üye sunucuda bulunamadı veya sunucudan ayrılmış!',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const result = await registerService.registerMember({
+      guild,
+      targetMember,
+      staffMember,
+      name,
+      gender: genderKey === 'male' ? 'MALE' : 'FEMALE',
+      originalMessage: interaction.message,
+    });
+
+    await interaction.editReply({ content: result.message });
+    return;
+  }
 
   if (customId === 'confession_modal') {
     const content = interaction.fields.getTextInputValue('confession_text');

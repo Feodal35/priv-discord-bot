@@ -56,6 +56,14 @@ import { kurulumCommand } from './commands/admin/kurulum';
 import { ayarlarCommand } from './commands/admin/ayarlar';
 import { guildMuafiyetCommand } from './commands/admin/guildMuafiyet';
 
+// Kayıt Komutları
+import { kayitCommand } from './commands/register/kayit';
+import { kayitsizCommand } from './commands/register/kayitsiz';
+import { kayitKurulumCommand } from './commands/register/kayitKurulum';
+import { kayitAyarCommand } from './commands/register/kayitAyar';
+import { kayitGecmisCommand } from './commands/register/kayitGecmis';
+import { kayitIstatistikCommand } from './commands/register/kayitIstatistik';
+
 // Eventler
 import { onReady } from './events/ready';
 import { onInteractionCreate } from './events/interactionCreate';
@@ -112,6 +120,12 @@ const allCommands: SlashCommand[] = [
   kurulumCommand,
   ayarlarCommand,
   guildMuafiyetCommand,
+  kayitCommand,
+  kayitsizCommand,
+  kayitKurulumCommand,
+  kayitAyarCommand,
+  kayitGecmisCommand,
+  kayitIstatistikCommand,
 ];
 
 for (const cmd of allCommands) {
