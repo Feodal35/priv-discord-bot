@@ -122,17 +122,36 @@ export async function buildLeaderboardReply(
   const entries = await Promise.all(
     topUsers.map(async (u, idx) => {
       let username = u.user.username;
+      let avatarUrl = '';
+
       try {
         const guild = client.guilds.cache.get(guildId);
         const member = await guild?.members.fetch(u.userId).catch(() => null);
-        username = member?.displayName || u.user.username;
+        if (member) {
+          username = member.displayName || member.user.username;
+          avatarUrl = member.displayAvatarURL({ extension: 'png', size: 128 });
+        }
       } catch { /* sessiz */ }
+
+      // Avatar bulunamazsa veya default ise Discord resmi varsayılan avatarını oluştur
+      if (!avatarUrl || avatarUrl.includes('/default.')) {
+        if (u.user.avatar) {
+          avatarUrl = `https://cdn.discordapp.com/avatars/${u.userId}/${u.user.avatar}.png?size=128`;
+        } else {
+          try {
+            const defaultIndex = Number((BigInt(u.userId) >> 22n) % 6n);
+            avatarUrl = `https://cdn.discordapp.com/embed/avatars/${defaultIndex}.png`;
+          } catch {
+            avatarUrl = `https://cdn.discordapp.com/embed/avatars/0.png`;
+          }
+        }
+      }
 
       return {
         rank: idx + 1,
         username,
         value: cfg.formatVal(u),
-        avatarUrl: `https://cdn.discordapp.com/avatars/${u.userId}/${u.user.avatar ?? 'default'}.png`,
+        avatarUrl,
       };
     })
   );

@@ -128,21 +128,47 @@ function drawChatIcon(ctx: SKRSContext2D, cx: number, cy: number, size: number) 
 }
 
 /**
- * Canvas metinlerinde Linux sunucusunda kare (▯ / tofu) çıkmasını önlemek için
- * kullanıcı adı, sunucu adı ve başlıklardaki emojileri temizler.
+ * Canvas metinlerinde Linux sunucusunda kare (▯ / tofu / [?]) çıkmasını önlemek için
+ * kullanıcı adı, sunucu adı ve başlıklardaki:
+ * 1. Mathematical Alphanumerics (Bold, Italic, Script, Fraktur, Double-struck, Sans-serif: 𝗩, 𝕍, 𝓥, 𝘝 vb.)
+ * 2. Small Caps (ᴀ, ʙ, ᴄ...) ve bölgesel karakterleri (ø -> o, æ -> ae, ß -> ss vb.)
+ * 3. Emojileri ve Discord custom emojilerini
+ * tamamen standart okunabilir Latin ve Türkçe karakterlere dönüştürür.
  */
-export function removeEmojis(str: string): string {
+export function cleanCanvasText(str: string): string {
   if (!str) return '';
-  return str
-    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F1E6}-\u{1F1FF}]/gu, '')
+
+  // 1. Unicode Compatibility Decomposition (NFKC)
+  // Mathematical Alphanumeric Symbols (U+1D400 - U+1D7FF), Fullwidth, Enclosed ve Superscript harfleri
+  // doğrudan standart ASCII A-Z, a-z, 0-9'a çevirir! (Örn: "𝗩" -> "V", "𝕕" -> "d", "𝕍" -> "V")
+  let text = str.normalize('NFKC');
+
+  // 2. Özel font jeneratörlerinin kullandığı Small-Caps ve özel alfabeler:
+  const charMap: Record<string, string> = {
+    'ᴀ': 'A', 'ʙ': 'B', 'ᴄ': 'C', 'ᴅ': 'D', 'ᴇ': 'E', 'ꜰ': 'F', 'ɢ': 'G', 'ʜ': 'H',
+    'ɪ': 'I', 'ᴊ': 'J', 'ᴋ': 'K', 'ʟ': 'L', 'ᴍ': 'M', 'ɴ': 'N', 'ᴏ': 'O', 'ᴘ': 'P',
+    'ǫ': 'Q', 'ʀ': 'R', 'ꜱ': 'S', 'ᴛ': 'T', 'ᴜ': 'U', 'ᴠ': 'V', 'ᴡ': 'W', 'ʏ': 'Y', 'ᴢ': 'Z',
+    'ø': 'o', 'Ø': 'O', 'æ': 'ae', 'Æ': 'AE', 'œ': 'oe', 'Œ': 'OE', 'ß': 'ss',
+    'đ': 'd', 'Đ': 'D', 'ł': 'l', 'Ł': 'L', 'þ': 'th', 'Þ': 'TH',
+  };
+
+  text = text.replace(/[ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡʏᴢøØæÆœŒßđĐłŁþÞ]/g, (ch) => charMap[ch] || ch);
+
+  // 3. Emojileri ve Discord custom emojilerini temizle (<:name:12345>, <a:name:12345>)
+  text = text
     .replace(/<a?:\w+:\d+>/g, '')
-    .replace(/ø/g, 'o')
-    .replace(/Ø/g, 'O')
-    .replace(/æ/g, 'ae')
-    .replace(/Æ/g, 'AE')
-    .replace(/ß/g, 'ss')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F1E6}-\u{1F1FF}]/gu, '');
+
+  // 4. Standart fontlarda tofu/kare oluşturan görünmeyen/kontrol karakterleri ve yabancı sembolleri filtrele
+  // Türkçe harfler (ç, ğ, ı, ö, ş, ü, Ç, Ğ, İ, Ö, Ş, Ü), standart Latin harfleri, sayılar ve yaygın noktalama işaretlerini tut:
+  text = text.replace(/[^\p{L}\p{N}\s.,!?'"_\-#@&()\[\]+=/\\:;~*<>-]/gu, '');
+
+  text = text.replace(/\s+/g, ' ').trim();
+  return text;
+}
+
+export function removeEmojis(str: string): string {
+  return cleanCanvasText(str);
 }
 
 function drawAnalyticsIcon(ctx: SKRSContext2D, cx: number, cy: number, size: number) {
@@ -816,9 +842,15 @@ export async function createLeaderboardCard(opts: {
       ctx.restore();
     }
 
+    // Kullanıcı Adı (Sanitized & High Contrast)
+    const cleanUser = cleanCanvasText(e.username) || `Üye #${e.rank}`;
+    const truncatedUser = cleanUser.length > 22 ? cleanUser.substring(0, 20) + '...' : cleanUser;
+
     // Avatar (Dairesel ve Gölgeli)
     const avatarCenterX = rx + 80;
     const avRadius = 19;
+    let avatarDrawn = false;
+
     if (e.avatarUrl) {
       try {
         const buf = await fetchBuf(e.avatarUrl.replace('.webp', '.png').split('?')[0] + '?size=64');
@@ -830,42 +862,53 @@ export async function createLeaderboardCard(opts: {
         ctx.clip();
         ctx.drawImage(img, avatarCenterX - avRadius, cy - avRadius, avRadius * 2, avRadius * 2);
         ctx.restore();
-
-        // Avatar Kenarlık Halkası
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(avatarCenterX, cy, avRadius + 1, 0, Math.PI * 2);
-        if (e.rank === 1) {
-          ctx.strokeStyle = '#f1c40f';
-          ctx.lineWidth = 2.2;
-          ctx.shadowColor = 'rgba(241, 196, 15, 0.6)';
-          ctx.shadowBlur = 8;
-        } else if (e.rank === 2) {
-          ctx.strokeStyle = '#bdc3c7';
-          ctx.lineWidth = 2;
-        } else if (e.rank === 3) {
-          ctx.strokeStyle = '#cd7f32';
-          ctx.lineWidth = 2;
-        } else {
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-          ctx.lineWidth = 1.2;
-        }
-        ctx.stroke();
-        ctx.restore();
+        avatarDrawn = true;
       } catch {
-        // Avatar yüklenemezse fallback daire
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(avatarCenterX, cy, avRadius, 0, Math.PI * 2);
-        ctx.fillStyle = '#2c2f33';
-        ctx.fill();
-        ctx.restore();
+        avatarDrawn = false;
       }
     }
 
-    // Kullanıcı Adı (Sanitized & High Contrast)
-    const cleanUser = removeEmojis(e.username) || `Üye #${e.rank}`;
-    const truncatedUser = cleanUser.length > 22 ? cleanUser.substring(0, 20) + '...' : cleanUser;
+    if (!avatarDrawn) {
+      // Avatar yüklenemezse veya bulunamazsa kullanıcının ilk harfiyle şık renkli avatar çiz
+      const initials = (cleanUser.charAt(0) || '?').toUpperCase();
+      const colors = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#e91e63'];
+      const colorIdx = Math.abs(cleanUser.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % colors.length;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(avatarCenterX, cy, avRadius, 0, Math.PI * 2);
+      ctx.fillStyle = colors[colorIdx];
+      ctx.fill();
+
+      ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(initials, avatarCenterX, cy + 1);
+      ctx.restore();
+    }
+
+    // Avatar Kenarlık Halkası
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avatarCenterX, cy, avRadius + 1, 0, Math.PI * 2);
+    if (e.rank === 1) {
+      ctx.strokeStyle = '#f1c40f';
+      ctx.lineWidth = 2.2;
+      ctx.shadowColor = 'rgba(241, 196, 15, 0.6)';
+      ctx.shadowBlur = 8;
+    } else if (e.rank === 2) {
+      ctx.strokeStyle = '#bdc3c7';
+      ctx.lineWidth = 2;
+    } else if (e.rank === 3) {
+      ctx.strokeStyle = '#cd7f32';
+      ctx.lineWidth = 2;
+    } else {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+      ctx.lineWidth = 1.2;
+    }
+    ctx.stroke();
+    ctx.restore();
 
     ctx.save();
     ctx.font = e.rank <= 3 ? 'bold 17px "Segoe UI", Arial, sans-serif' : '16px "Segoe UI", Arial, sans-serif';
@@ -979,15 +1022,16 @@ export async function createServerStatsCard(opts: {
   }
 
   // Guild name
+  const cleanGuild = cleanCanvasText(opts.guildName) || 'Sunucu';
   ctx.save();
-  ctx.font = 'bold 22px sans-serif';
+  ctx.font = 'bold 22px "Segoe UI", Arial, sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'top';
-  ctx.fillText(opts.guildName.substring(0, 30), 84, 16);
+  ctx.fillText(cleanGuild.substring(0, 26), 84, 16);
   ctx.restore();
 
   ctx.save();
-  ctx.font = '13px sans-serif';
+  ctx.font = '13px "Segoe UI", Arial, sans-serif';
   ctx.fillStyle = 'rgba(255,255,255,0.4)';
   ctx.textBaseline = 'top';
   ctx.fillText('Sunucu İstatistikleri', 84, 44);
@@ -1015,14 +1059,14 @@ export async function createServerStatsCard(opts: {
     ctx.restore();
 
     ctx.save();
-    ctx.font = 'bold 10px sans-serif';
+    ctx.font = 'bold 10px "Segoe UI", Arial, sans-serif';
     ctx.fillStyle = s.color;
     ctx.textBaseline = 'top';
     ctx.fillText(s.label, sx + 10, sy + 8);
     ctx.restore();
 
     ctx.save();
-    ctx.font = 'bold 15px sans-serif';
+    ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.textBaseline = 'top';
     ctx.fillText(s.value, sx + 10, sy + 25);
@@ -1032,12 +1076,12 @@ export async function createServerStatsCard(opts: {
   // Top users strip at bottom
   if (opts.topChatter || opts.topVoice) {
     ctx.save();
-    ctx.font = '11px sans-serif';
+    ctx.font = '11px "Segoe UI", Arial, sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.textBaseline = 'bottom';
     const parts: string[] = [];
-    if (opts.topChatter) parts.push('En Çok Konuşan: ' + opts.topChatter);
-    if (opts.topVoice)   parts.push('En Çok Seste: ' + opts.topVoice);
+    if (opts.topChatter) parts.push('En Çok Konuşan: ' + (cleanCanvasText(opts.topChatter) || '—'));
+    if (opts.topVoice)   parts.push('En Çok Seste: ' + (cleanCanvasText(opts.topVoice) || '—'));
     ctx.fillText(parts.join('   •   '), 12, CH - 10);
     ctx.restore();
   }

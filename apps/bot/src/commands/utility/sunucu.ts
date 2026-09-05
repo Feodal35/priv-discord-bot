@@ -27,13 +27,14 @@ export const sunucuCommand: SlashCommand = {
     const guild = interaction.guild;
     await guild.members.fetch();
 
+    const fetchedGuild = await guild.fetch().catch(() => null);
     const memberCount  = guild.memberCount;
     const botCount     = guild.members.cache.filter((m) => m.user.bot).size;
     const humanCount   = memberCount - botCount;
-    const onlineCount  = guild.members.cache.filter(
-      (m) => m.presence?.status === 'online' || m.presence?.status === 'idle' || m.presence?.status === 'dnd'
-    ).size;
     const voiceCount   = guild.members.cache.filter((m) => !!m.voice.channelId).size;
+    const onlineCount  = fetchedGuild?.approximatePresenceCount
+      || guild.members.cache.filter((m) => m.presence && m.presence.status !== 'offline').size
+      || Math.max(voiceCount, 1);
     const boosterCount = guild.premiumSubscriptionCount || 0;
     const boostTier    = guild.premiumTier;
     const channelCount = guild.channels.cache.size;
