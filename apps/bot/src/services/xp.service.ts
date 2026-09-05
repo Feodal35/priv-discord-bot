@@ -3,7 +3,6 @@ import { getLevelFromXp, DEFAULT_LEVEL_ROLES, formatCurrency } from '@priv/share
 import { Client, TextChannel } from 'discord.js';
 import { guildService } from './guild.service';
 import { userService } from './user.service';
-import { createSuccessEmbed } from '../utils/embed';
 import { achievementService } from './achievement.service';
 import { questService } from './quest.service';
 import { logger } from '../utils/logger';
@@ -159,15 +158,7 @@ export class XpService {
 
       const newLevel = getLevelFromXp(userGuild.xp);
       if (newLevel > userGuild.level) {
-        const chatChannel = (await client.channels.fetch(MAIN_CHAT_CHANNEL_ID).catch(() => null)) as TextChannel | null;
-        if (chatChannel) {
-          await this.handleLevelUp(guildId, userId, newLevel, userGuild.level, chatChannel, client);
-        } else {
-          await prisma.userGuild.update({
-            where: { userId_guildId: { userId, guildId } },
-            data: { level: newLevel },
-          });
-        }
+        await this.handleLevelUp(guildId, userId, newLevel, userGuild.level, undefined, client);
       }
     } catch (err) {
       logger.error(`[XP] addVoiceXp hatası:`, err);
@@ -179,10 +170,10 @@ export class XpService {
     userId: string,
     newLevel: number,
     oldLevel: number,
-    channel: TextChannel,
-    client: Client
+    channel?: TextChannel,
+    client?: Client
   ) {
-    // Seviye ödülü belirleme
+    // Seviye ödülü belirleme (Sessizce bakiyeye eklenir, mesaj atılmaz)
     const levelConfig = DEFAULT_LEVEL_ROLES.find((r) => r.level === newLevel);
     const coinReward = levelConfig?.rewardCoins || newLevel * 50;
 
@@ -205,29 +196,29 @@ export class XpService {
       }),
     ]);
 
-    // Rol verme kontrolü
-    let roleText = '';
+    // Rol verme kontrolü (Sessizce verilir)
     if (levelConfig) {
       try {
-        const guild = channel.guild;
-        const role = guild.roles.cache.find((r) => r.name.toLowerCase() === levelConfig.name.toLowerCase());
-        const member = await guild.members.fetch(userId);
+        const guild = channel?.guild || client?.guilds.cache.get(guildId);
+        if (guild) {
+          const role = guild.roles.cache.find((r) => r.name.toLowerCase() === levelConfig.name.toLowerCase());
+          const member = await guild.members.fetch(userId).catch(() => null);
 
-        if (role && guild.members.me?.permissions.has('ManageRoles') && guild.members.me.roles.highest.position > role.position) {
-          await member.roles.add(role);
-          roleText = `\n👑 **Kazanılan Rol:** \`${role.name}\``;
+          if (
+            member &&
+            role &&
+            guild.members.me?.permissions.has('ManageRoles') &&
+            guild.members.me.roles.highest.position > role.position
+          ) {
+            await member.roles.add(role).catch(() => {});
+          }
         }
       } catch (err) {
-        console.error('[HATA] Seviye rolü verilemedi:', err);
+        logger.error('[XP] Seviye rolü verilemedi:', err);
       }
     }
 
-    const embed = createSuccessEmbed(
-      'Tebrikler! Seviye Atladın!',
-      `🎉 <@${userId}>, başarıyla **Seviye ${newLevel}** seviyesine ulaştı!\n\n💰 **Kazanılan Ödül:** \`${formatCurrency(coinReward)} Coin\`${roleText}`
-    );
-
-    await channel.send({ embeds: [embed] }).catch(() => {});
+    // KULLANICI TALEBİ: Seviye atlayınca hiçbir bildirim mesajı atılmaz ve etiketleme yapılmaz.
   }
 }
 
