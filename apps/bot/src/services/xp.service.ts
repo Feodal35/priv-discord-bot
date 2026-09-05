@@ -220,6 +220,28 @@ export class XpService {
 
     // KULLANICI TALEBİ: Seviye atlayınca hiçbir bildirim mesajı atılmaz ve etiketleme yapılmaz.
   }
+
+  /**
+   * Özel durumlarda (kasa açma, etkinlik vb.) kullanıcıya doğrudan XP ekler
+   */
+  public async addCustomXp(guildId: string, userId: string, amount: number) {
+    if (amount <= 0) return null;
+    await userService.ensureUserAndGuild(userId, guildId);
+    const userGuild = await prisma.userGuild.upsert({
+      where: { userId_guildId: { userId, guildId } },
+      update: { xp: { increment: amount } },
+      create: { userId, guildId, xp: amount },
+    });
+    const newLevel = getLevelFromXp(userGuild.xp);
+    if (newLevel > userGuild.level) {
+      await prisma.userGuild.update({
+        where: { userId_guildId: { userId, guildId } },
+        data: { level: newLevel },
+      });
+    }
+    return userGuild;
+  }
 }
 
 export const xpService = new XpService();
+

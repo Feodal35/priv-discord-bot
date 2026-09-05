@@ -31,9 +31,12 @@ const CATEGORIES: Record<string, { emoji: string; title: string; description: st
   economy: {
     emoji: '💰',
     title: 'Ekonomi & Market',
-    description: 'Para kazanma, harcama ve ticaret komutları',
+    description: 'Para kazanma, harcama, bankacılık ve ticaret komutları',
     commands: [
       { name: '/bakiye', desc: 'Cüzdan ve banka bakiyesini görüntüler' },
+      { name: '/banka', desc: 'Banka kasasına para yatırır veya cüzdana çeker' },
+      { name: '/soy', desc: 'Başka bir üyenin cüzdanını gizlice soymaya çalışır' },
+      { name: '/kasa-aç', desc: 'Bronz, Gümüş veya Elmas şans sandığı açar' },
       { name: '/günlük', desc: 'Günlük ödülü toplar, streak artırır' },
       { name: '/çalış', desc: '25 farklı iş arasından coin kazanır (1s cooldown)' },
       { name: '/gönder', desc: 'Başka bir üyeye güvenli coin transferi yapar' },
@@ -45,8 +48,9 @@ const CATEGORIES: Record<string, { emoji: string; title: string; description: st
   games: {
     emoji: '🎮',
     title: 'Mini Oyunlar & Kumar',
-    description: 'Şans oyunları, kart oyunları ve mini aktiviteler',
+    description: 'Şans oyunları, kart oyunları ve kullanıcı düelloları',
     commands: [
+      { name: '/düello', desc: 'Üyeler arası bahisli Zar, Rus Ruleti ve TKM düellosu' },
       { name: '/balık-tut', desc: '8 farklı balık arasından yakalamaya çalış (20s cd)' },
       { name: '/slot', desc: 'Slot makinesi (50-50,000 coin), 30x\'e kadar ödül' },
       { name: '/blackjack', desc: 'Krupiyeye karşı 21 oyunu' },
@@ -119,8 +123,8 @@ export const yardimCommand: SlashCommand = {
       )
       .addFields(
         { name: '👤 Sosyal & Evlilik',      value: '`/profil`, `/evlen`, `/evlilik`, `/boşan`, `/zengin`, ...', inline: true },
-        { name: '💰 Ekonomi & Market',       value: '`/bakiye`, `/günlük`, `/çalış`, `/gönder`, `/market`, ...', inline: true },
-        { name: '🎮 Mini Oyunlar & Kumar',   value: '`/balık-tut`, `/slot`, `/blackjack`, `/rulet`, ...', inline: true },
+        { name: '💰 Ekonomi & Market',       value: '`/bakiye`, `/banka`, `/soy`, `/kasa-aç`, `/market`, ...', inline: true },
+        { name: '🎮 Mini Oyunlar & Kumar',   value: '`/düello`, `/balık-tut`, `/slot`, `/blackjack`, ...', inline: true },
         { name: '🎤 Ses & Dinamik Odalar',   value: '`/topluçek`, `/toplutaşı`, `/voice`, ...', inline: true },
         { name: '🛡️ Moderasyon & Güvenlik', value: '`/uyar`, `/sustur`, `/at`, `/yasakla`, `/temizle`, ...', inline: true },
         { name: '⚙️ Sunucu & Araçlar',      value: '`/sunucu`, `/sıralama`, `/anket`, `/çekiliş`, ...', inline: true },

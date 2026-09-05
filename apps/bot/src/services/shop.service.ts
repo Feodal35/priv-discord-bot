@@ -3,8 +3,70 @@ import { guildService } from './guild.service';
 import { formatCurrency } from '@priv/shared';
 import { Guild as DiscordGuild, GuildMember } from 'discord.js';
 
+export const SPECIAL_SHOP_ITEMS = [
+  {
+    name: 'Çelik Kasa',
+    description: '🛡️ Cüzdanındaki parayı soygunlara karşı %100 korur. Kırılamaz!',
+    price: 15000,
+    type: 'SHIELD',
+  },
+  {
+    name: 'Bekçi Köpeği',
+    description: '🐕 Seni soymaya çalışan hırsızı ısırır ve sana 1.000 Coin tazminat kazandırır!',
+    price: 20000,
+    type: 'DOG',
+  },
+  {
+    name: 'Bronz Kasa',
+    description: '📦 Şans sandığı: Coin, XP veya Gümüş Yüzük kazanma şansı!',
+    price: 1000,
+    type: 'BOX',
+  },
+  {
+    name: 'Gümüş Kasa',
+    description: '🎁 Değerli sandık: Yüksek Coin, XP, Altın Yüzük veya Savunma Eşyası!',
+    price: 5000,
+    type: 'BOX',
+  },
+  {
+    name: 'Elmas Kasa',
+    description: '💎 Efsanevi sandık: 100.000 Coin Jackpot, devasa XP veya Pırlanta Yüzük!',
+    price: 25000,
+    type: 'BOX',
+  },
+];
+
 export class ShopService {
+  /**
+   * Sunucu marketindeki özel eşyaları (kasalar, savunma araçları) garanti eder
+   */
+  public async ensureSpecialItemsInShop(guildId: string) {
+    try {
+      for (const item of SPECIAL_SHOP_ITEMS) {
+        const existing = await prisma.shopItem.findFirst({
+          where: { guildId, name: item.name },
+        });
+        if (!existing) {
+          await prisma.shopItem.create({
+            data: {
+              guildId,
+              name: item.name,
+              description: item.description,
+              price: item.price,
+              type: item.type,
+              stock: -1,
+              isActive: true,
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[SHOP] ensureSpecialItemsInShop hatası:', err);
+    }
+  }
+
   public async getShopItems(guildId: string) {
+    await this.ensureSpecialItemsInShop(guildId);
     return prisma.shopItem.findMany({
       where: { guildId, isActive: true },
       orderBy: { price: 'asc' },

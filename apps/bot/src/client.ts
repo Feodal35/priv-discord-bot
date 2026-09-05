@@ -24,6 +24,9 @@ import { gonderCommand } from './commands/economy/gonder';
 import { marketCommand } from './commands/economy/market';
 import { envanterCommand } from './commands/economy/envanter';
 import { gorevCommand } from './commands/economy/gorev';
+import { bankaCommand } from './commands/economy/banka';
+import { soyCommand } from './commands/economy/soy';
+import { kasaCommand } from './commands/economy/kasa';
 
 // Oyun Komutları
 import { oyunCommand } from './commands/games/oyun';
@@ -33,6 +36,8 @@ import { ruletCommand } from './commands/games/rulet';
 import { kelimeOyunCommand } from './commands/games/kelimeOyun';
 import { balikTutCommand } from './commands/games/balikTut';
 import { slotCommand } from './commands/games/slot';
+import { duelloCommand } from './commands/games/duello';
+
 
 // Araç Komutları
 import { yardimCommand } from './commands/utility/yardim';
@@ -106,12 +111,16 @@ const allCommands: SlashCommand[] = [
   evlilikCommand,
   bosanCommand,
   bakiyeCommand,
+  bankaCommand,
+  soyCommand,
   gunlukCommand,
   calisCommand,
   gonderCommand,
   marketCommand,
   envanterCommand,
+  kasaCommand,
   gorevCommand,
+  duelloCommand,
   oyunCommand,
   shipCommand,
   blackjackCommand,
