@@ -362,7 +362,6 @@ export class EconomyService {
     remainingMinutes?: number;
     stolenAmount?: number;
     penaltyAmount?: number;
-    timeoutMinutes?: number;
     message: string;
   }> {
     if (robberId === victimId) {
@@ -462,8 +461,7 @@ export class EconomyService {
       return {
         outcome: 'BITTEN_DOG',
         penaltyAmount: penalty,
-        timeoutMinutes: 10,
-        message: `🐕 **HAV! HAV!** <@${victimId}> kullanıcısının **Bekçi Köpeği** seni fark etti ve bacağından ısırdı! Kaçarken **${formatCurrency(penalty)} Coin** düşürdün ve hedefe tazminat olarak ödendi! Ayrıca yaralandığın için **10 dakika** nezarete (timeout) atıldın! 🚑`,
+        message: `🐕 **HAV! HAV!** <@${victimId}> kullanıcısının **Bekçi Köpeği** seni fark etti ve bacağından ısırdı! Kaçarken hedefe **${formatCurrency(penalty)} Coin** tazminat ödemek zorunda kaldın! 🩹`,
       };
     }
 
@@ -520,8 +518,8 @@ export class EconomyService {
         message: `🥷 **SOYGUN BAŞARILI!** Parmak uçlarında yaklaştın ve <@${victimId}> cüzdanından sessizce **${formatCurrency(stolen)} Coin** aşırdın! 💰`,
       };
     } else {
-      // Başarısız: Yakalandı!
-      const penalty = Math.min(robberCoins, Math.max(250, Math.floor(robberCoins * 0.20)));
+      // Başarısız: Yakalandı! (500 Coin veya cüzdanının %20'si)
+      const penalty = Math.min(robberCoins, Math.max(500, Math.floor(robberCoins * 0.20)));
 
       await prisma.$transaction([
         prisma.userGuild.update({
@@ -547,8 +545,7 @@ export class EconomyService {
       return {
         outcome: 'CAUGHT',
         penaltyAmount: penalty,
-        timeoutMinutes: 10,
-        message: `🚨 **YAKALANDIN!** <@${victimId}> cüzdanına uzanırken suçüstü yakalandın! Mahkemece mağdura **${formatCurrency(penalty)} Coin** tazminat ödemeye ve **10 dakika** nezarete (timeout) mahkum edildin! 👮`,
+        message: `🚨 **YAKALANDIN!** <@${victimId}> cüzdanına uzanırken suçüstü yakalandın! Hedefe **${formatCurrency(penalty)} Coin** tazminat ödemek zorunda kaldın! 👮`,
       };
     }
   }

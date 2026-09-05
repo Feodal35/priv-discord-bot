@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, GuildMember } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 import { SlashCommand } from '../../types/command';
 import { economyService } from '../../services/economy.service';
 import { guildService } from '../../services/guild.service';
@@ -58,25 +58,6 @@ export const soyCommand: SlashCommand = {
 
     const result = await economyService.robUser(guildId, robber.id, targetUser.id);
 
-    // Timeout (Nezaret) cezası uygulama (Eğer yakalandıysa veya köpek ısırdıysa)
-    if (result.timeoutMinutes && interaction.guild) {
-      try {
-        const robberMember = await interaction.guild.members.fetch(robber.id).catch(() => null);
-        if (
-          robberMember &&
-          robberMember.moderatable &&
-          interaction.guild.members.me?.permissions.has('ModerateMembers')
-        ) {
-          await robberMember.timeout(
-            result.timeoutMinutes * 60 * 1000,
-            'Soygun girişiminde suçüstü yakalandı'
-          );
-        }
-      } catch (err) {
-        console.error('[SOY] Timeout uygulanamadı:', err);
-      }
-    }
-
     if (result.outcome === 'COOLDOWN') {
       const embed = createEmbed({
         title: '🕒 Polisler Hala Peşinde!',
@@ -132,7 +113,7 @@ export const soyCommand: SlashCommand = {
         title: '🚨 Suçüstü Yakalandın!',
         description: result.message,
         color: DEFAULT_COLORS.DANGER as any,
-        footer: { text: 'Soygun riski yüksektir! Yakalanırsan tazminat öder ve nezarete atılırsın.' },
+        footer: { text: 'Soygun riski yüksektir! Yakalanırsan hedefe doğrudan tazminat ödersin.' },
       });
       await interaction.editReply({ embeds: [embed] });
       return;
