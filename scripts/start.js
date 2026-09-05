@@ -15,16 +15,16 @@ bot.on('close', (code) => {
   console.log(`[BOT] Süreç sonlandı (Kod: ${code})`);
 });
 
-process.on('SIGTERM', () => {
-  console.log('Kapatma sinyali alındı (SIGTERM), alt süreçler durduruluyor...');
-  api.kill('SIGTERM');
-  bot.kill('SIGTERM');
-  process.exit(0);
-});
+function gracefulShutdown(signal) {
+  console.log(`Kapatma sinyali alındı (${signal}), alt süreçler güvenli şekilde kaydedilerek durduruluyor...`);
+  try { api.kill(signal); } catch (e) {}
+  try { bot.kill(signal); } catch (e) {}
 
-process.on('SIGINT', () => {
-  console.log('Kapatma sinyali alındı (SIGINT), alt süreçler durduruluyor...');
-  api.kill('SIGINT');
-  bot.kill('SIGINT');
-  process.exit(0);
-});
+  // Botun tüm aktif oturumları ve verileri PostgreSQL'e kaydetmesi için 4 saniye süre tanı
+  setTimeout(() => {
+    process.exit(0);
+  }, 4000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

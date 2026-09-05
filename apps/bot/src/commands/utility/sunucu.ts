@@ -1,4 +1,10 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, AttachmentBuilder } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+  AttachmentBuilder,
+  EmbedBuilder,
+  MessageFlags,
+} from 'discord.js';
 import { SlashCommand } from '../../types/command';
 import { prisma } from '@priv/database';
 import { createEmbed } from '../../utils/embed';
@@ -12,7 +18,7 @@ export const sunucuCommand: SlashCommand = {
   cooldown: 5,
   async execute(interaction: ChatInputCommandInteraction) {
     if (!interaction.guild) {
-      await interaction.reply({ content: 'Bu komut sadece sunucularda kullanılabilir.', ephemeral: true });
+      await interaction.reply({ content: 'Bu komut sadece sunucularda kullanılabilir.', flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -28,6 +34,11 @@ export const sunucuCommand: SlashCommand = {
       (m) => m.presence?.status === 'online' || m.presence?.status === 'idle' || m.presence?.status === 'dnd'
     ).size;
     const voiceCount   = guild.members.cache.filter((m) => !!m.voice.channelId).size;
+    const boosterCount = guild.premiumSubscriptionCount || 0;
+    const boostTier    = guild.premiumTier;
+    const channelCount = guild.channels.cache.size;
+    const roleCount    = guild.roles.cache.size;
+    const emojiCount   = guild.emojis.cache.size;
 
     const stats = await prisma.userGuild.aggregate({
       where: { guildId: guild.id },
@@ -47,6 +58,7 @@ export const sunucuCommand: SlashCommand = {
     });
 
     const totalAchievements = await prisma.userAchievement.count({ where: { guildId: guild.id } });
+    const totalMarriages = await prisma.marriage.count({ where: { guildId: guild.id } }).catch(() => 0);
 
     const totalVoiceHours = (stats._sum.voiceSeconds || 0) / 3600;
 
@@ -70,30 +82,61 @@ export const sunucuCommand: SlashCommand = {
       console.error('[SUNUCU] Canvas hatası:', err);
     }
 
-    const embed = createEmbed({
-      title: `📊 ${guild.name} — Sunucu İstatistikleri`,
-      thumbnail: imageBuffer ? undefined : (guild.iconURL() || undefined),
-      color: DEFAULT_COLORS.PRIMARY as any,
-      fields: [
+    const createdAt = Math.floor(guild.createdTimestamp / 1000);
+    const boostTierName = ['Tier Yok', '🥉 Tier 1', '🥈 Tier 2', '🥇 Tier 3'][boostTier] || 'Bilinmiyor';
+
+    const embed = new EmbedBuilder()
+      .setColor(DEFAULT_COLORS.PRIMARY as any)
+      .setTitle(`📊 ${guild.name} — Sunucu İstatistikleri`)
+      .setThumbnail(imageBuffer ? null : (guild.iconURL() || null))
+      .addFields(
         {
-          name: '👥 Üye Sayısı',
-          value: `Toplam: **${memberCount}**\nÜyeler: **${humanCount}** | Botlar: **${botCount}**\nÇevrimiçi: **${onlineCount}** | Seste: **${voiceCount}**`,
+          name: '👥 Üye Durumu',
+          value:
+            `👤 Toplam: **${memberCount}**\n` +
+            `🧑 Üyeler: **${humanCount}** | 🤖 Botlar: **${botCount}**\n` +
+            `🟢 Çevrimiçi: **${onlineCount}** | 🎤 Seste: **${voiceCount}**`,
           inline: true,
         },
         {
-          name: '💬 Aktivite',
-          value: `Mesaj: **${formatCurrency(stats._sum.messageCount || 0)}**\nSes: **${formatHours(totalVoiceHours)}**`,
+          name: '📈 Aktivite',
+          value:
+            `💬 Mesaj: **${formatCurrency(stats._sum.messageCount || 0)}**\n` +
+            `🎤 Ses: **${formatHours(totalVoiceHours)}**\n` +
+            `💬 En Aktif: **${topChatter?.user.username || '—'}**`,
           inline: true,
         },
         {
-          name: '🪙 Ekonomi',
-          value: `Para: **${formatCurrency(stats._sum.coins || 0)} Coin**\nBaşarım: **${totalAchievements} Adet**`,
+          name: '💰 Ekonomi & Sosyal',
+          value:
+            `🪙 Toplam Coin: **${formatCurrency(stats._sum.coins || 0)}**\n` +
+            `🏆 Başarım: **${totalAchievements}**\n` +
+            `💍 Evli Çift: **${totalMarriages}**`,
           inline: true,
         },
-      ],
-      footer: { text: `Sunucu ID: ${guild.id}` },
-      timestamp: false,
-    });
+        {
+          name: '🏗️ Sunucu Yapısı',
+          value:
+            `📁 Kanal: **${channelCount}**\n` +
+            `🎭 Rol: **${roleCount}**\n` +
+            `😀 Emoji: **${emojiCount}**`,
+          inline: true,
+        },
+        {
+          name: '🚀 Boost Durumu',
+          value:
+            `${boostTierName}\n` +
+            `💜 Boost Sayısı: **${boosterCount}**`,
+          inline: true,
+        },
+        {
+          name: '📅 Kuruluş Tarihi',
+          value: `<t:${createdAt}:D> (<t:${createdAt}:R>)`,
+          inline: true,
+        },
+      )
+      .setFooter({ text: `Sunucu ID: ${guild.id}` })
+      .setTimestamp();
 
     if (imageBuffer) {
       const attachment = new AttachmentBuilder(imageBuffer, { name: 'sunucu.png' });

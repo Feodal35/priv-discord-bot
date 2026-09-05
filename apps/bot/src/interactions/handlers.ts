@@ -17,6 +17,10 @@ import {
   VoiceChannel,
 } from 'discord.js';
 import { userService } from '../services/user.service';
+import { buildLeaderboardReply, LbCategory, buildCategoryButtons } from '../commands/utility/siralama';
+import { buildCategoryEmbed } from '../commands/utility/yardim';
+import { shopService as shopServiceForMarket } from '../services/shop.service';
+import { guildService as guildServiceForMarket } from '../services/guild.service';
 import { achievementService } from '../services/achievement.service';
 import { shopService } from '../services/shop.service';
 import { questService } from '../services/quest.service';
@@ -1010,6 +1014,138 @@ export async function handleButtonInteraction(interaction: ButtonInteraction) {
     return;
   }
 
+  // 9.5 SIRALAMA KATEGORİ BUTONLARI (lb_cat_)
+  if (customId.startsWith('lb_cat_')) {
+    const category = customId.replace('lb_cat_', '') as LbCategory;
+    await interaction.deferUpdate();
+
+    const result = await buildLeaderboardReply(
+      guild.id,
+      guild.name,
+      guild.iconURL({ extension: 'png', size: 128 }),
+      category,
+      interaction.client
+    );
+
+    if (!result) {
+      await interaction.followUp({ content: 'Bu kategoride henüz veri yok.', ephemeral: true });
+      return;
+    }
+
+    const catRow = buildCategoryButtons(category);
+
+    if (result.imageBuffer) {
+      const attachment = new AttachmentBuilder(result.imageBuffer, { name: 'siralama.png' });
+      await interaction.editReply({ embeds: [result.embed], files: [attachment], components: [catRow] });
+    } else {
+      await interaction.editReply({ embeds: [result.embed], components: [catRow] });
+    }
+    return;
+  }
+
+  // 9.6 MARKET SAYFALAMA BUTONLARI (market_prev_ / market_next_)
+  if (customId.startsWith('market_prev_') || customId.startsWith('market_next_')) {
+    await interaction.deferUpdate();
+    const page = parseInt(customId.split('_').pop()!, 10);
+    const items = await shopServiceForMarket.getShopItems(guild.id);
+    const settings = await guildServiceForMarket.getGuildSettings(guild.id);
+
+    const MPAGE_SIZE = 5;
+    const mTotalPages = Math.ceil(items.length / MPAGE_SIZE);
+    const mSafeP = Math.max(0, Math.min(page, mTotalPages - 1));
+    const mStart = mSafeP * MPAGE_SIZE;
+    const mPageItems = items.slice(mStart, mStart + MPAGE_SIZE);
+
+    const MARKET_EMOJIS: Record<string, string> = { ROLE: '🎭', XP_BOOST: '⚡', BADGE: '🏅', RING: '💍', CUSTOM: '🎁' };
+    const STOCK_COLOR = (s: number) => s === -1 ? '🟢' : s > 10 ? '🟢' : s > 0 ? '🟡' : '🔴';
+
+    const mDesc = mPageItems.map((item, idx) => {
+      const gi = mStart + idx + 1;
+      const stockText = item.stock === -1 ? 'Sınırsız' : `${item.stock} Adet`;
+      return (
+        `**${gi}. ${MARKET_EMOJIS[item.type] || '📦'} ${item.name}**\n` +
+        `> ${item.description}\n` +
+        `> 💰 **Fiyat:** \`${formatCurrency(item.price)} ${settings.currencyName}\`\n` +
+        `> ${STOCK_COLOR(item.stock)} **Stok:** \`${stockText}\``
+      );
+    }).join('\n\n');
+
+    const { EmbedBuilder: EmbedBld } = await import('discord.js');
+    const mEmbed = new EmbedBld()
+      .setColor(0xf1c40f)
+      .setTitle(`🛒 ${guild.name} — Sunucu Marketi`)
+      .setDescription(mDesc)
+      .setFooter({ text: `Sayfa ${mSafeP + 1}/${mTotalPages} • ${items.length} ürün` });
+
+    const mBuyRow = new ActionRowBuilder<ButtonBuilder>();
+    mPageItems.forEach((item) => {
+      mBuyRow.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`shop_buy_${item.id}`)
+          .setLabel(`Satın Al`)
+          .setEmoji('🛍️')
+          .setStyle(item.stock === 0 ? ButtonStyle.Secondary : ButtonStyle.Success)
+          .setDisabled(item.stock === 0)
+      );
+    });
+
+    const mNavRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`market_prev_${mSafeP - 1}`).setLabel('◀ Önceki').setStyle(ButtonStyle.Secondary).setDisabled(mSafeP === 0),
+      new ButtonBuilder().setCustomId(`market_page_${mSafeP}`).setLabel(`📄 ${mSafeP + 1} / ${mTotalPages}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
+      new ButtonBuilder().setCustomId(`market_next_${mSafeP + 1}`).setLabel('Sonraki ▶').setStyle(ButtonStyle.Secondary).setDisabled(mSafeP >= mTotalPages - 1)
+    );
+
+    const mRows = mBuyRow.components.length > 0 ? [mBuyRow, mNavRow] : [mNavRow];
+    await interaction.editReply({ embeds: [mEmbed], components: mRows });
+    return;
+  }
+
+  // 9.7 ENVANTER SAYFALAMA BUTONLARI (inv_prev_ / inv_next_)
+  if (customId.startsWith('inv_prev_') || customId.startsWith('inv_next_')) {
+    await interaction.deferUpdate();
+    const parts = customId.split('_');
+    const targetUserId = parts[2];
+    const page = parseInt(parts[3], 10);
+
+    const inventory = await shopService.getInventory(guild.id, targetUserId);
+    const IPAGE_SIZE = 8;
+    const iTotalPages = Math.ceil(inventory.length / IPAGE_SIZE);
+    const iSafeP = Math.max(0, Math.min(page, iTotalPages - 1));
+    const iStart = iSafeP * IPAGE_SIZE;
+    const iPageItems = inventory.slice(iStart, iStart + IPAGE_SIZE);
+
+    const INV_EMOJIS: Record<string, string> = { ROLE: '🎭', XP_BOOST: '⚡', BADGE: '🏅', RING: '💍', CUSTOM: '🎁' };
+    const iTargetUser = await interaction.client.users.fetch(targetUserId).catch(() => null);
+    const iUsername = iTargetUser?.username || 'Kullanıcı';
+
+    const iLines = iPageItems.map((inv, idx) => {
+      const gi = iStart + idx + 1;
+      const emoji = INV_EMOJIS[inv.item.type] || '📦';
+      const qty = inv.quantity > 1 ? ` **(x${inv.quantity})**` : '';
+      const dateStr = inv.purchasedAt.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' });
+      return `**${gi}. ${emoji} ${inv.item.name}**${qty}\n> ${inv.item.description}\n> 📅 *${dateStr}*`;
+    });
+
+    const { EmbedBuilder: EmbedBld2 } = await import('discord.js');
+    const iEmbed = new EmbedBld2()
+      .setColor(0x5865f2)
+      .setTitle(`🎒 ${iUsername} — Envanter`)
+      .setDescription(iLines.join('\n\n'))
+      .setThumbnail(iTargetUser?.displayAvatarURL({ extension: 'png', size: 128 }) || null)
+      .setFooter({ text: `Sayfa ${iSafeP + 1}/${iTotalPages} • Toplam ${inventory.length} eşya` });
+
+    const iNavRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`inv_prev_${targetUserId}_${iSafeP - 1}`).setLabel('◀ Önceki').setStyle(ButtonStyle.Secondary).setDisabled(iSafeP === 0),
+      new ButtonBuilder().setCustomId(`inv_page_${iSafeP}`).setLabel(`📦 ${iSafeP + 1} / ${iTotalPages}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
+      new ButtonBuilder().setCustomId(`inv_next_${targetUserId}_${iSafeP + 1}`).setLabel('Sonraki ▶').setStyle(ButtonStyle.Secondary).setDisabled(iSafeP >= iTotalPages - 1)
+    );
+
+    await interaction.editReply({ embeds: [iEmbed], components: [iNavRow] });
+    return;
+  }
+
+
+
   // 9. AYARLAR SEKMELERİ
   if (customId.startsWith('settings_tab_')) {
     const tab = customId.replace('settings_tab_', '');
@@ -1251,85 +1387,10 @@ export async function handleSelectMenuInteraction(interaction: StringSelectMenuI
 
   if (customId === 'help_category_select') {
     const selected = values[0];
-
-    const categoryDetails: Record<string, { title: string; desc: string }> = {
-      social: {
-        title: '👤 Sosyal & Profil Komutları',
-        desc:
-          '`/profil [@üye]` — Kişisel profil kartını, seviyeni, coinlerini ve streak serini gösterir.\n' +
-          '`/seviye [@üye]` — Seviye ilerleme çubuğu ve XP detaylarını verir.\n' +
-          '`/streak` — Günlük aktiflik ateş serini ve kilometre taşı ödüllerini listeler.\n' +
-          '`/başarımlar [@üye]` — Kazanılan ve kilitli sunucu başarımlarını listeler.\n' +
-          '`/hafıza [liste/ekle]` — Sunucunun unutulmaz dönüm noktalarını kaydeder ve görüntüler.\n' +
-          '`/yılözeti [yıl]` — Sunucunun yıllık sohbet ve ses aktivitesi özetini sunar.\n' +
-          '`/verilerim` — KVKK gereği sunucuda tutulan kişisel verilerini gösterir.\n' +
-          '`/verilerimi-sil` — Kayıtlı verilerini kalıcı olarak siler.',
-      },
-      economy: {
-        title: '💰 Ekonomi & Market Komutları',
-        desc:
-          '`/bakiye [@üye]` — Cüzdan ve banka bakiyesini gösterir.\n' +
-          '`/günlük` — Günlük coin hediyesini ve streak bonusunu toplar.\n' +
-          '`/çalış` — 1 saatlik cooldown ile çalışarak sunucu parası kazanır.\n' +
-          '`/gönder @üye miktar` — Güvenli database transaction ile başka bir üyeye para transfer eder.\n' +
-          '`/market` — Sunucu mağazasından rol, rozet veya ürün satın alır.\n' +
-          '`/envanter` — Satın aldığın eşyaları ve rolleri listeler.\n' +
-          '`/görev` — Günlük ve haftalık görevleri takip edip ödülleri toplar.',
-      },
-      games: {
-        title: '🎮 Mini Oyunlar & Eğlence',
-        desc:
-          '`/oyun xox @rakip` — 3x3 buton gridi ile gerçek zamanlı Tic-Tac-Toe oynar.\n' +
-          '`/oyun tkm [@rakip]` — Taş, Kağıt, Makas düellosu yapar.\n' +
-          '`/oyun yazı-tura [seçim] [bahis]` — Bahisli yazı-tura atar.\n' +
-          '`/oyun zar [bahis]` — Bota karşı yüksek zar atma bahsi oynar.\n' +
-          '`/oyun sayı-tahmini` — 1-100 arası sayı bulma oyunu başlatır.\n' +
-          '`/ship @üye` — İki kullanıcı arasındaki aşk uyumunu ve eğlenceli yorumu hesaplar.',
-      },
-      voice: {
-        title: '🎤 Dinamik Ses Odası Komutları',
-        desc:
-          '`/voice kilitle` — Kendi geçici ses odanı yabancıların girişine kilitler.\n' +
-          '`/voice aç` — Oda kilidini herkese açar.\n' +
-          '`/voice limit [sayı]` — Odaya girebilecek kişi sayısını sınırlar.\n' +
-          '`/voice isim [yeni_isim]` — Geçici ses odanın adını değiştirir.\n' +
-          '`/voice at @üye` — Odaya izinsiz giren üyeyi odadan atar.',
-      },
-      moderation: {
-        title: '🛡️ Moderasyon Komutları',
-        desc:
-          '`/uyar @üye [sebep]` — Üyeyi kurallara aykırı davranıştan uyarır.\n' +
-          '`/timeout @üye [dakika]` — Üyeye geçici susturma uygular.\n' +
-          '`/sustur @üye [dakika]` — Metin ve ses kanallarında susturur.\n' +
-          '`/at @üye [sebep]` — Üyeyi sunucudan atar (Kick).\n' +
-          '`/yasakla @üye [sebep]` — Üyeyi sunucudan kalıcı olarak banlar.\n' +
-          '`/temizle [sayı]` — Kanaldan belirtilen sayıda mesajı toplu siler.\n' +
-          '`/kilitle` — Kanalı mesaj yazmaya kapatır.\n' +
-          '`/aç` — Kanalın mesaj kilidini kaldırır.',
-      },
-      utility: {
-        title: '⚙️ Sunucu & Araç Komutları',
-        desc:
-          '`/kurulum` — Tek tıkla Priv Bot sunucu sihirbazını başlatır.\n' +
-          '`/ayarlar` — Sunucu özelliklerini ve kanallarını yönetir.\n' +
-          '`/sunucu` — Sunucu üye, ses ve mesaj istatistiklerini görüntüler.\n' +
-          '`/sıralama` — XP, Coin, Mesaj ve Ses liderlik tablosunu listeler.\n' +
-          '`/itiraf` — Tamamen anonim itiraf gönderir.\n' +
-          '`/anket` — Butonlu canlı anket başlatır.\n' +
-          '`/doğumgünü [gün] [ay]` — Doğum gününü kaydeder.\n' +
-          '`/hatırlat [süre] [not]` — Belirlediğin süre sonra sana bildirim gönderir.',
-      },
-    };
-
-    const cat = categoryDetails[selected];
-    if (cat) {
-      const embed = createEmbed({
-        title: cat.title,
-        description: cat.desc,
-        color: DEFAULT_COLORS.PRIMARY,
-        footer: { text: 'Priv Bot • %100 Türkçe Modüler Sistem' },
-      });
+    const embed = buildCategoryEmbed(selected);
+    if (embed) {
       await interaction.reply({ embeds: [embed], ephemeral: true });
     }
   }
 }
+

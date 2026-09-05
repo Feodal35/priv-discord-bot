@@ -5,12 +5,173 @@ import {
   ButtonBuilder,
   ButtonStyle,
   AttachmentBuilder,
+  EmbedBuilder,
+  MessageFlags,
 } from 'discord.js';
 import { SlashCommand } from '../../types/command';
 import { prisma } from '@priv/database';
-import { createEmbed } from '../../utils/embed';
-import { DEFAULT_COLORS, formatCurrency, formatHours } from '@priv/shared';
+import { DEFAULT_COLORS, formatCurrency, formatHours, getLevelFromXp } from '@priv/shared';
 import { createLeaderboardCard } from '../../utils/canvas';
+import { voiceService } from '../../services/voice.service';
+
+export type LbCategory = 'xp' | 'coins' | 'messageCount' | 'voiceSeconds' | 'dailyStreak';
+
+export interface LbConfig {
+  title: string;
+  icon: string;
+  color: number;
+  orderBy: Record<string, string>;
+  formatVal: (u: any) => string;
+}
+
+export const LB_CONFIGS: Record<LbCategory, LbConfig> = {
+  xp: {
+    title: 'Seviye ve XP Sıralaması',
+    icon: '⭐',
+    color: 0xf1c40f,
+    orderBy: { xp: 'desc' },
+    formatVal: (u) => `Seviye ${getLevelFromXp(u.xp)} — ${formatCurrency(u.xp)} XP`,
+  },
+  coins: {
+    title: 'En Zenginler (Coin)',
+    icon: '🪙',
+    color: 0xf39c12,
+    orderBy: { coins: 'desc' },
+    formatVal: (u) => `${formatCurrency(u.coins)} Coin`,
+  },
+  messageCount: {
+    title: 'En Çok Mesaj Gönderenler',
+    icon: '💬',
+    color: 0x2ecc71,
+    orderBy: { messageCount: 'desc' },
+    formatVal: (u) => `${formatCurrency(u.messageCount)} mesaj`,
+  },
+  voiceSeconds: {
+    title: 'En Çok Ses Kanalında Kalanlar',
+    icon: '🎤',
+    color: 0x3498db,
+    orderBy: { voiceSeconds: 'desc' },
+    formatVal: (u) => {
+      const liveSec = voiceService.getLiveVoiceSeconds(u.guildId, u.userId, u.voiceSeconds);
+      return formatHours(liveSec / 3600);
+    },
+  },
+  dailyStreak: {
+    title: 'En Uzun Günlük Streak',
+    icon: '🔥',
+    color: 0xe74c3c,
+    orderBy: { dailyStreak: 'desc' },
+    formatVal: (u) => `${u.dailyStreak} Gün`,
+  },
+};
+
+export function buildCategoryButtons(active: LbCategory): ActionRowBuilder<ButtonBuilder> {
+  const cats: Array<{ id: LbCategory; label: string; emoji: string }> = [
+    { id: 'xp',           label: 'XP/Seviye',  emoji: '⭐' },
+    { id: 'coins',        label: 'Coin',        emoji: '🪙' },
+    { id: 'messageCount', label: 'Mesaj',       emoji: '💬' },
+    { id: 'voiceSeconds', label: 'Ses',         emoji: '🎤' },
+    { id: 'dailyStreak',  label: 'Streak',      emoji: '🔥' },
+  ];
+
+  const row = new ActionRowBuilder<ButtonBuilder>();
+  cats.forEach(({ id, label, emoji }) => {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`lb_cat_${id}`)
+        .setLabel(label)
+        .setEmoji(emoji)
+        .setStyle(id === active ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        .setDisabled(id === active)
+    );
+  });
+  return row;
+}
+
+export async function buildLeaderboardReply(
+  guildId: string,
+  guildName: string,
+  guildIconUrl: string | null | undefined,
+  category: LbCategory,
+  client: any
+) {
+  const cfg = LB_CONFIGS[category];
+
+  let topUsers = await prisma.userGuild.findMany({
+    where: { guildId },
+    orderBy: cfg.orderBy,
+    take: 15,
+    include: { user: true },
+  });
+
+  if (topUsers.length === 0) return null;
+
+  // Ses sıralaması için anlık aktif ses sürelerini de ekle ve yeniden sırala
+  if (category === 'voiceSeconds') {
+    topUsers = topUsers
+      .map((u) => ({
+        ...u,
+        _liveSeconds: voiceService.getLiveVoiceSeconds(guildId, u.userId, u.voiceSeconds),
+      }))
+      .sort((a, b) => b._liveSeconds - a._liveSeconds)
+      .slice(0, 10);
+  } else {
+    topUsers = topUsers.slice(0, 10);
+  }
+
+  const entries = await Promise.all(
+    topUsers.map(async (u, idx) => {
+      let username = u.user.username;
+      try {
+        const guild = client.guilds.cache.get(guildId);
+        const member = await guild?.members.fetch(u.userId).catch(() => null);
+        username = member?.displayName || u.user.username;
+      } catch { /* sessiz */ }
+
+      return {
+        rank: idx + 1,
+        username,
+        value: cfg.formatVal(u),
+        avatarUrl: `https://cdn.discordapp.com/avatars/${u.userId}/${u.user.avatar ?? 'default'}.png`,
+      };
+    })
+  );
+
+  let imageBuffer: Buffer | null = null;
+  try {
+    imageBuffer = await createLeaderboardCard({
+      title: cfg.title,
+      icon: cfg.icon,
+      entries,
+      guildIconUrl: guildIconUrl || undefined,
+      guildName,
+    });
+  } catch (err) {
+    console.error('[SIRALAMA] Canvas kartı oluşturma hatası:', err);
+  }
+
+  const podiumIcons = ['🥇', '🥈', '🥉'];
+  const podiumLines = topUsers.slice(0, 3).map((u, idx) => {
+    return `${podiumIcons[idx]} **#${idx + 1}** <@${u.userId}> — \`${cfg.formatVal(u)}\``;
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor(cfg.color)
+    .setTitle(`${cfg.icon} ${cfg.title}`)
+    .setDescription(
+      `🏆 **Liderlik Kürsüsü:**\n` +
+      podiumLines.join('\n') +
+      `\n\n📊 *Detaylı ilk 10 sıralaması aşağıdaki tabloda gösterilmektedir.*`
+    )
+    .setFooter({ text: `${guildName} • Liderlik Tablosu • Priv Bot` })
+    .setTimestamp();
+
+  if (imageBuffer) {
+    embed.setImage('attachment://siralama.png');
+  }
+
+  return { embed, imageBuffer, entries, cfg };
+}
 
 export const siralamaCommand: SlashCommand = {
   data: new SlashCommandBuilder()
@@ -19,125 +180,49 @@ export const siralamaCommand: SlashCommand = {
     .addStringOption((opt) =>
       opt
         .setName('kategori')
-        .setDescription('Sıralama kategorisi')
+        .setDescription('Başlangıç sıralaması kategorisi')
         .setRequired(false)
         .addChoices(
-          { name: 'XP / Seviye',      value: 'xp' },
-          { name: 'Cüzdan (Coin)',    value: 'coins' },
-          { name: 'Mesaj Sayısı',     value: 'messageCount' },
-          { name: 'Ses Süresi',       value: 'voiceSeconds' },
-          { name: 'Streak',           value: 'dailyStreak' }
+          { name: '⭐ XP / Seviye',     value: 'xp' },
+          { name: '🪙 Cüzdan (Coin)',   value: 'coins' },
+          { name: '💬 Mesaj Sayısı',    value: 'messageCount' },
+          { name: '🎤 Ses Süresi',      value: 'voiceSeconds' },
+          { name: '🔥 Streak',          value: 'dailyStreak' }
         )
     ),
   cooldown: 5,
   async execute(interaction: ChatInputCommandInteraction) {
     if (!interaction.guild) {
-      await interaction.reply({ content: 'Bu komut sadece sunucularda kullanılabilir.', ephemeral: true });
+      await interaction.reply({ content: 'Bu komut sadece sunucularda kullanılabilir.', flags: MessageFlags.Ephemeral });
       return;
     }
 
     await interaction.deferReply();
 
-    const category = interaction.options.getString('kategori') || 'xp';
-    const guildId = interaction.guild.id;
+    const category = (interaction.options.getString('kategori') || 'xp') as LbCategory;
 
-    let orderByObj: any = { xp: 'desc' };
-    let title = 'Seviye ve XP Sıralaması';
-    let icon = '⭐';
-    let formatVal = (u: any) => `Seviye ${u.level} — ${formatCurrency(u.xp)} XP`;
+    const result = await buildLeaderboardReply(
+      interaction.guild.id,
+      interaction.guild.name,
+      interaction.guild.iconURL({ extension: 'png', size: 128 }),
+      category,
+      interaction.client
+    );
 
-    if (category === 'coins') {
-      orderByObj = { coins: 'desc' };
-      title = 'En Zenginler (Coin) Sıralaması';
-      icon = '🪙';
-      formatVal = (u: any) => `${formatCurrency(u.coins)} Coin`;
-    } else if (category === 'messageCount') {
-      orderByObj = { messageCount: 'desc' };
-      title = 'En Çok Mesaj Gönderenler';
-      icon = '💬';
-      formatVal = (u: any) => `${formatCurrency(u.messageCount)} mesaj`;
-    } else if (category === 'voiceSeconds') {
-      orderByObj = { voiceSeconds: 'desc' };
-      title = 'En Çok Ses Kanalında Kalanlar';
-      icon = '🎤';
-      formatVal = (u: any) => `${formatHours(u.voiceSeconds / 3600)}`;
-    } else if (category === 'dailyStreak') {
-      orderByObj = { dailyStreak: 'desc' };
-      title = 'En Uzun Günlük Streak Serileri';
-      icon = '🔥';
-      formatVal = (u: any) => `${u.dailyStreak} Gün`;
-    }
-
-    const topUsers = await prisma.userGuild.findMany({
-      where: { guildId },
-      orderBy: orderByObj,
-      take: 10,
-      include: { user: true },
-    });
-
-    if (topUsers.length === 0) {
+    if (!result) {
       await interaction.editReply({
         content: 'Henüz sıralama oluşmadı. Biraz mesaj yazarak veya ses odalarına katılarak ilk sırayı alabilirsin!',
       });
       return;
     }
 
-    // Build canvas entries
-    const entries = await Promise.all(
-      topUsers.map(async (u, idx) => {
-        let username = u.user.username;
-        try {
-          const member = await interaction.guild!.members.fetch(u.userId).catch(() => null);
-          username = member?.displayName || u.user.username;
-        } catch { /* skip */ }
+    const catRow = buildCategoryButtons(category);
 
-        return {
-          rank: idx + 1,
-          username,
-          value: formatVal(u),
-          avatarUrl: `https://cdn.discordapp.com/avatars/${u.userId}/${u.user.avatar ?? 'default'}.png`,
-        };
-      })
-    );
-
-    let imageBuffer: Buffer | null = null;
-    try {
-      imageBuffer = await createLeaderboardCard({
-        title,
-        icon,
-        entries,
-        guildIconUrl: interaction.guild.iconURL({ extension: 'png', size: 128 }) || undefined,
-      });
-    } catch (err) {
-      console.error('[SIRALAMA] Canvas hatası:', err);
-    }
-
-    const medals = ['🥇', '🥈', '🥉'];
-    const lines = topUsers.map((u, idx) => {
-      const prefix = medals[idx] || `**#${idx + 1}**`;
-      return `${prefix} <@${u.userId}> — ${formatVal(u)}`;
-    });
-
-    const embed = createEmbed({
-      title: `${icon} ${title}`,
-      description: lines.join('\n\n'),
-      color: DEFAULT_COLORS.GOLD as any,
-      thumbnail: imageBuffer ? undefined : (interaction.guild.iconURL() || undefined),
-      footer: { text: `İlk 10 üye listeleniyor • Priv Liderlik Tablosu` },
-      timestamp: false,
-    });
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId(`lb_prev_${category}_0`).setLabel('◀ Önceki').setStyle(ButtonStyle.Secondary).setDisabled(true),
-      new ButtonBuilder().setCustomId(`lb_next_${category}_1`).setLabel('Sonraki ▶').setStyle(ButtonStyle.Secondary).setDisabled(topUsers.length < 10)
-    );
-
-    if (imageBuffer) {
-      const attachment = new AttachmentBuilder(imageBuffer, { name: 'siralama.png' });
-      embed.setImage('attachment://siralama.png');
-      await interaction.editReply({ embeds: [embed], files: [attachment], components: [row] });
+    if (result.imageBuffer) {
+      const attachment = new AttachmentBuilder(result.imageBuffer, { name: 'siralama.png' });
+      await interaction.editReply({ embeds: [result.embed], files: [attachment], components: [catRow] });
     } else {
-      await interaction.editReply({ embeds: [embed], components: [row] });
+      await interaction.editReply({ embeds: [result.embed], components: [catRow] });
     }
   },
 };

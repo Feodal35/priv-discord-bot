@@ -15,7 +15,7 @@ import { marriageService } from './marriage.service';
 import { xpService } from './xp.service';
 import { questService } from './quest.service';
 import { createEmbed } from '../utils/embed';
-import { DEFAULT_COLORS } from '@priv/shared';
+import { DEFAULT_COLORS, getLevelFromXp } from '@priv/shared';
 import { logger } from '../utils/logger';
 
 export const DEFAULT_TEMP_VOICE_CHANNEL_ID = '1545543780818755626';
@@ -32,20 +32,22 @@ export class VoiceService {
   private trackerInterval: NodeJS.Timeout | null = null;
 
   /**
-   * Bot başladığında seste olan tüm kullanıcıları hafızaya alır
+   * Bot başladığında seste olan tüm kullanıcıları hafızaya alır.
+   * guild.voiceStates.cache kullanarak hiçbir kullanıcıyı atlamaz.
    */
   public initVoiceSessions(client: Client) {
     const now = Date.now();
     let count = 0;
     for (const [, guild] of client.guilds.cache) {
       const afkId = guild.afkChannelId;
-      for (const [, channel] of guild.channels.cache) {
-        if (channel.isVoiceBased() && channel.id !== afkId) {
-          for (const [memberId, member] of channel.members) {
-            if (!member.user.bot) {
-              const key = `${guild.id}:${memberId}`;
+      for (const [userId, voiceState] of guild.voiceStates.cache) {
+        if (voiceState.channelId && voiceState.channelId !== afkId) {
+          const member = voiceState.member;
+          if (!member?.user.bot) {
+            const key = `${guild.id}:${userId}`;
+            if (!this.activeSessions.has(key)) {
               this.activeSessions.set(key, {
-                channelId: channel.id,
+                channelId: voiceState.channelId,
                 joinedAt: now,
                 lastFlushedAt: now,
               });
@@ -60,7 +62,7 @@ export class VoiceService {
 
   /**
    * Her 60 saniyede bir seste olan tüm kullanıcıların sürelerini ve XP'lerini veritabanına kaydeder.
-   * Bot yeniden başlasa bile süreler asla kaybolmaz!
+   * lastFlushedAt SADECE veritabanı yazımı başarılı olduğunda ilerletilir.
    */
   public startVoiceTracker(client: Client) {
     if (this.trackerInterval) return;
@@ -74,7 +76,6 @@ export class VoiceService {
         if (elapsedSecs >= 60) {
           const minutes = Math.floor(elapsedSecs / 60);
           const flushSeconds = minutes * 60;
-          session.lastFlushedAt += flushSeconds * 1000;
 
           try {
             await userService.ensureUserAndGuild(userId, guildId);
@@ -97,7 +98,7 @@ export class VoiceService {
 
             const earnedXp = Math.floor(minutes * 5 * xpMultiplier);
 
-            await prisma.userGuild.upsert({
+            const userGuild = await prisma.userGuild.upsert({
               where: { userId_guildId: { userId, guildId } },
               update: {
                 voiceSeconds: { increment: flushSeconds },
@@ -111,13 +112,94 @@ export class VoiceService {
               },
             });
 
+            // Seviyeyi anında senkronize et
+            const newLevel = getLevelFromXp(userGuild.xp);
+            if (newLevel !== userGuild.level) {
+              await prisma.userGuild.update({
+                where: { userId_guildId: { userId, guildId } },
+                data: { level: newLevel },
+              }).catch(() => {});
+            }
+
+            // SADECE DB yazımı başarılıysa ilerlet
+            session.lastFlushedAt += flushSeconds * 1000;
+
             await questService.incrementProgress(guildId, userId, 'VOICE_TIME', flushSeconds).catch(() => {});
           } catch (e) {
-            // sessiz
+            logger.warn(`[VOICE] Tracker DB yazma hatası (${cacheKey}), bir sonraki döngüde tekrar denenecek: ${e}`);
           }
         }
       }
     }, 60000);
+  }
+
+  /**
+   * Bot kapatılırken (restart / deploy) hafızadaki TÜM aktif ses
+   * sürelerini ve kazanılan XP'leri veritabanına eksiksiz yazar.
+   * Böylece bot res yediğinde kullanıcıların 1 saniyesi bile kaybolmaz!
+   */
+  public async flushAllSessions(): Promise<number> {
+    const now = Date.now();
+    let flushedCount = 0;
+
+    for (const [cacheKey, session] of this.activeSessions.entries()) {
+      const [guildId, userId] = cacheKey.split(':');
+      const elapsedSecs = Math.floor((now - session.lastFlushedAt) / 1000);
+
+      if (elapsedSecs >= 2) {
+        try {
+          await userService.ensureUserAndGuild(userId, guildId);
+
+          let xpMultiplier = 1;
+          try {
+            const marriage = await marriageService.getMarriage(guildId, userId);
+            if (marriage) {
+              const partnerId = marriage.user1Id === userId ? marriage.user2Id : marriage.user1Id;
+              const partnerSession = this.activeSessions.get(`${guildId}:${partnerId}`);
+              if (partnerSession && partnerSession.channelId === session.channelId) {
+                xpMultiplier = 1.5;
+                const mins = Math.floor(elapsedSecs / 60);
+                if (mins > 0) {
+                  await marriageService.addLovePoints(marriage.id, mins).catch(() => {});
+                }
+              }
+            }
+          } catch {}
+
+          const earnedXp = Math.floor((elapsedSecs / 60) * 5 * xpMultiplier);
+
+          const ug = await prisma.userGuild.upsert({
+            where: { userId_guildId: { userId, guildId } },
+            update: {
+              voiceSeconds: { increment: elapsedSecs },
+              xp: { increment: earnedXp },
+            },
+            create: {
+              userId,
+              guildId,
+              voiceSeconds: elapsedSecs,
+              xp: earnedXp,
+            },
+          });
+
+          const newLevel = getLevelFromXp(ug.xp);
+          if (newLevel !== ug.level) {
+            await prisma.userGuild.update({
+              where: { userId_guildId: { userId, guildId } },
+              data: { level: newLevel },
+            }).catch(() => {});
+          }
+
+          session.lastFlushedAt = now;
+          flushedCount++;
+        } catch (err) {
+          logger.error(`[VOICE] flushAllSessions hata (${cacheKey}): ${err}`);
+        }
+      }
+    }
+
+    logger.info(`[VOICE] Güvenli Kapatma: ${flushedCount} aktif ses oturumu veritabanına kalıcı kaydedildi.`);
+    return flushedCount;
   }
 
   /**
@@ -192,21 +274,32 @@ export class VoiceService {
         const afkChannelId = oldState.guild.afkChannelId;
         if (oldState.channelId !== afkChannelId) {
           // Kalan saniyeleri veritabanına işle
-          if (unFlushedSeconds >= 5) {
+          if (unFlushedSeconds >= 2) {
             await userService.ensureUserAndGuild(userId, guildId).catch(() => {});
-            await prisma.userGuild.upsert({
+            const earnedXp = Math.floor(unFlushedSeconds / 60) * 5;
+            const ug = await prisma.userGuild.upsert({
               where: { userId_guildId: { userId, guildId } },
               update: {
                 voiceSeconds: { increment: unFlushedSeconds },
-                xp: { increment: Math.floor(unFlushedSeconds / 60) * 5 },
+                xp: { increment: earnedXp },
               },
               create: {
                 userId,
                 guildId,
                 voiceSeconds: unFlushedSeconds,
-                xp: Math.floor(unFlushedSeconds / 60) * 5,
+                xp: earnedXp,
               },
-            }).catch(() => {});
+            }).catch(() => null);
+
+            if (ug) {
+              const newLvl = getLevelFromXp(ug.xp);
+              if (newLvl !== ug.level) {
+                await prisma.userGuild.update({
+                  where: { userId_guildId: { userId, guildId } },
+                  data: { level: newLvl },
+                }).catch(() => {});
+              }
+            }
 
             await questService.incrementProgress(guildId, userId, 'VOICE_TIME', unFlushedSeconds).catch(() => {});
           }
@@ -364,10 +457,18 @@ export class VoiceService {
         }
 
         const channel = (await guild.channels.fetch(record.channelId).catch(() => null)) as VoiceChannel | null;
-        if (!channel || channel.members.filter((m) => !m.user.bot).size === 0) {
-          if (channel) {
-            await channel.delete('Bot yeniden başladığında asılı kalan boş oda temizlendi.').catch(() => {});
-          }
+        if (!channel) {
+          await prisma.temporaryVoiceChannel.delete({ where: { id: record.id } }).catch(() => {});
+          continue;
+        }
+
+        // Hem channel.members hem de guild.voiceStates.cache denetlenerek kullanıcı olan oda asla silinmez
+        const hasActiveMembers =
+          channel.members.filter((m) => !m.user.bot).size > 0 ||
+          guild.voiceStates.cache.some((vs) => vs.channelId === channel.id && !vs.member?.user.bot);
+
+        if (!hasActiveMembers) {
+          await channel.delete('Bot yeniden başladığında asılı kalan boş oda temizlendi.').catch(() => {});
           await prisma.temporaryVoiceChannel.delete({ where: { id: record.id } }).catch(() => {});
         }
       } catch (err) {

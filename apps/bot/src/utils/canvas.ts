@@ -135,6 +135,12 @@ export function removeEmojis(str: string): string {
   if (!str) return '';
   return str
     .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F1E6}-\u{1F1FF}]/gu, '')
+    .replace(/<a?:\w+:\d+>/g, '')
+    .replace(/ø/g, 'o')
+    .replace(/Ø/g, 'O')
+    .replace(/æ/g, 'ae')
+    .replace(/Æ/g, 'AE')
+    .replace(/ß/g, 'ss')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -610,123 +616,309 @@ export async function createStreakCard(opts: {
 }
 
 // ─────────────────────────────────────────────────────────────
-// LEADERBOARD CARD  (600 × 380)
+// LEADERBOARD CARD  (850 × Dynamic)
 // ─────────────────────────────────────────────────────────────
 export async function createLeaderboardCard(opts: {
   title: string;
   icon: string;
   entries: { rank: number; username: string; value: string; avatarUrl?: string }[];
   guildIconUrl?: string;
+  guildName?: string;
 }): Promise<Buffer> {
-  const CW = 600, CH = 60 + opts.entries.length * 48;
-  const canvas = createCanvas(CW, Math.max(CH, 200));
+  const CW = 850;
+  const rowHeight = 54;
+  const rowGap = 10;
+  const startY = 110;
+  const CH = startY + Math.max(opts.entries.length, 1) * (rowHeight + rowGap) + 20;
+
+  const canvas = createCanvas(CW, CH);
   const ctx = canvas.getContext('2d');
 
-  // BG
-  const bg = ctx.createLinearGradient(0, 0, 0, CH);
-  bg.addColorStop(0, '#0a0a18');
-  bg.addColorStop(1, '#12122a');
+  // 1. Ana Arka Plan - Derin Uzay & Discord Obsidian Degradesi
+  const bg = ctx.createLinearGradient(0, 0, CW, CH);
+  bg.addColorStop(0, '#0c0e17');
+  bg.addColorStop(0.5, '#121526');
+  bg.addColorStop(1, '#0a0c16');
   ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, CW, Math.max(CH, 200));
+  ctx.fillRect(0, 0, CW, CH);
 
-  // Header
-  const hg = ctx.createLinearGradient(0, 0, CW, 50);
-  hg.addColorStop(0, '#f39c12');
-  hg.addColorStop(1, '#e67e22');
-  ctx.fillStyle = hg;
-  ctx.fillRect(0, 0, CW, 50);
+  // 2. Işıltılı Neon Auralar (Arka Plan Ambient Glow)
+  const glowTop = ctx.createRadialGradient(80, 50, 10, 80, 50, 260);
+  glowTop.addColorStop(0, 'rgba(243, 156, 18, 0.20)');
+  glowTop.addColorStop(1, 'transparent');
+  ctx.fillStyle = glowTop;
+  ctx.fillRect(0, 0, CW, CH);
 
+  const glowBottom = ctx.createRadialGradient(CW - 80, CH - 100, 10, CW - 80, CH - 100, 300);
+  glowBottom.addColorStop(0, 'rgba(88, 101, 242, 0.16)');
+  glowBottom.addColorStop(1, 'transparent');
+  ctx.fillStyle = glowBottom;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // 3. Dış Çerçeve (Glassmorphism Bordürü)
   ctx.save();
-  ctx.font = 'bold 20px sans-serif';
-  ctx.fillStyle = '#ffffff';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(opts.title, 16, 25);
+  clipRoundRect(ctx, 10, 10, CW - 20, CH - 20, 24);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.09)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
   ctx.restore();
 
-  // Rows
-  const badgeColors: Record<number, { bg: string; text: string }> = {
-    1: { bg: '#f1c40f', text: '#000000' },
-    2: { bg: '#bdc3c7', text: '#000000' },
-    3: { bg: '#cd7f32', text: '#ffffff' },
-  };
+  // 4. HEADER BÖLÜMÜ
+  // Sol: Kategori Başlığı ve Rozet
+  ctx.save();
+  ctx.font = 'bold 24px "Segoe UI", Arial, sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'top';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+  ctx.shadowBlur = 10;
+  const cleanTitle = removeEmojis(opts.title) || 'Liderlik Tablosu';
+  ctx.fillText(cleanTitle, 35, 34);
+  ctx.restore();
 
-  for (let i = 0; i < opts.entries.length; i++) {
-    const e = opts.entries[i];
-    const ry = 50 + i * 48;
-    const isEven = i % 2 === 0;
+  // Alt başlık (Subtitle)
+  ctx.save();
+  ctx.font = 'bold 12px "Segoe UI", Arial, sans-serif';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+  ctx.textBaseline = 'top';
+  ctx.fillText('TOP 10 LİDERLİK TABLOSU • EN AKTİF ÜYELER', 35, 68);
+  ctx.restore();
 
-    // Row BG
-    ctx.save();
-    clipRoundRect(ctx, 8, ry + 4, CW - 16, 40, 6);
-    ctx.fillStyle = isEven ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)';
-    ctx.fill();
-    ctx.restore();
-
-    // Top-3 highlight
-    if (e.rank <= 3) {
-      const gold = ['rgba(243,156,18,0.15)', 'rgba(189,195,199,0.12)', 'rgba(205,127,50,0.12)'];
-      ctx.save();
-      clipRoundRect(ctx, 8, ry + 4, CW - 16, 40, 6);
-      ctx.fillStyle = gold[e.rank - 1];
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // Avatar mini circle
-    if (e.avatarUrl) {
-      try {
-        const buf = await fetchBuf(e.avatarUrl.replace('.webp','.png').split('?')[0] + '?size=64');
-        const img = await loadImage(buf);
-        const cx = 34, cy = ry + 24;
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(cx, cy, 16, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.drawImage(img, cx - 16, cy - 16, 32, 32);
-        ctx.restore();
-      } catch { /* skip */ }
-    }
-
-    // Rank badge (Vector)
-    const badge = badgeColors[e.rank];
-    if (badge) {
+  // Sağ Üst: Sunucu Rozeti / İkonu
+  const rightX = CW - 35;
+  if (opts.guildIconUrl) {
+    try {
+      const gBuf = await fetchBuf(opts.guildIconUrl.replace('.webp', '.png').split('?')[0] + '?size=64');
+      const gImg = await loadImage(gBuf);
       ctx.save();
       ctx.beginPath();
-      ctx.arc(68, ry + 24, 12, 0, Math.PI * 2);
-      ctx.fillStyle = badge.bg;
+      ctx.arc(rightX - 22, 50, 22, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(gImg, rightX - 44, 28, 44, 44);
+      ctx.restore();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(rightX - 22, 50, 23, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    } catch {}
+  }
+
+  // Header Ayırıcı Çizgi (Glowing Gradient Bar)
+  const sepGrad = ctx.createLinearGradient(35, 96, CW - 35, 96);
+  sepGrad.addColorStop(0, 'rgba(243, 156, 18, 0.8)');
+  sepGrad.addColorStop(0.3, 'rgba(88, 101, 242, 0.5)');
+  sepGrad.addColorStop(0.7, 'rgba(255, 255, 255, 0.15)');
+  sepGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = sepGrad;
+  ctx.fillRect(35, 96, CW - 70, 2);
+
+  // 5. SATIRLAR (ENTRIES)
+  for (let i = 0; i < opts.entries.length; i++) {
+    const e = opts.entries[i];
+    const ry = startY + i * (rowHeight + rowGap);
+    const rowW = CW - 70;
+    const rx = 35;
+    const cy = ry + rowHeight / 2;
+
+    // Satır Arka Planı
+    ctx.save();
+    clipRoundRect(ctx, rx, ry, rowW, rowHeight, 14);
+
+    if (e.rank === 1) {
+      // 🥇 1. Sıra - Lüks Altın Degrade
+      const r1Grad = ctx.createLinearGradient(rx, ry, rx + rowW, ry);
+      r1Grad.addColorStop(0, 'rgba(241, 196, 15, 0.24)');
+      r1Grad.addColorStop(0.4, 'rgba(243, 156, 18, 0.12)');
+      r1Grad.addColorStop(1, 'rgba(241, 196, 15, 0.04)');
+      ctx.fillStyle = r1Grad;
       ctx.fill();
-      ctx.font = 'bold 12px sans-serif';
-      ctx.fillStyle = badge.text;
+      ctx.strokeStyle = 'rgba(241, 196, 15, 0.55)';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    } else if (e.rank === 2) {
+      // 🥈 2. Sıra - Gümüş / Platin Degrade
+      const r2Grad = ctx.createLinearGradient(rx, ry, rx + rowW, ry);
+      r2Grad.addColorStop(0, 'rgba(220, 225, 235, 0.18)');
+      r2Grad.addColorStop(0.4, 'rgba(189, 195, 199, 0.08)');
+      r2Grad.addColorStop(1, 'rgba(255, 255, 255, 0.03)');
+      ctx.fillStyle = r2Grad;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(220, 225, 235, 0.45)';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    } else if (e.rank === 3) {
+      // 🥉 3. Sıra - Bronz / Bakır Degrade
+      const r3Grad = ctx.createLinearGradient(rx, ry, rx + rowW, ry);
+      r3Grad.addColorStop(0, 'rgba(205, 127, 50, 0.18)');
+      r3Grad.addColorStop(0.4, 'rgba(211, 84, 0, 0.08)');
+      r3Grad.addColorStop(1, 'rgba(205, 127, 50, 0.03)');
+      ctx.fillStyle = r3Grad;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(205, 127, 50, 0.45)';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    } else {
+      // 4-10 Sıralar - Modern Glass Kart
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.06)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Sıralama Rozeti (Rank Badge)
+    const badgeCenterX = rx + 30;
+    if (e.rank <= 3) {
+      ctx.save();
+      const bGrad = ctx.createLinearGradient(badgeCenterX - 16, cy - 16, badgeCenterX + 16, cy + 16);
+      if (e.rank === 1) {
+        bGrad.addColorStop(0, '#f1c40f');
+        bGrad.addColorStop(1, '#e67e22');
+        ctx.shadowColor = 'rgba(241, 196, 15, 0.6)';
+        ctx.shadowBlur = 12;
+      } else if (e.rank === 2) {
+        bGrad.addColorStop(0, '#f5f6fa');
+        bGrad.addColorStop(1, '#95a5a6');
+        ctx.shadowColor = 'rgba(220, 225, 235, 0.5)';
+        ctx.shadowBlur = 10;
+      } else {
+        bGrad.addColorStop(0, '#e67e22');
+        bGrad.addColorStop(1, '#b9770e');
+        ctx.shadowColor = 'rgba(205, 127, 50, 0.5)';
+        ctx.shadowBlur = 10;
+      }
+      ctx.beginPath();
+      ctx.arc(badgeCenterX, cy, 15, 0, Math.PI * 2);
+      ctx.fillStyle = bGrad;
+      ctx.fill();
+
+      // Madalya numarası
+      ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif';
+      ctx.fillStyle = e.rank === 1 ? '#000000' : e.rank === 2 ? '#1e272e' : '#ffffff';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(e.rank), 68, ry + 24);
+      ctx.fillText(String(e.rank), badgeCenterX, cy + 1);
       ctx.restore();
     } else {
       ctx.save();
-      ctx.font = 'bold 14px sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      clipRoundRect(ctx, badgeCenterX - 16, cy - 13, 32, 26, 7);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.fill();
+      ctx.font = 'bold 14px "Segoe UI", Arial, sans-serif';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`#${e.rank}`, 68, ry + 24);
+      ctx.fillText(`#${e.rank}`, badgeCenterX, cy + 1);
       ctx.restore();
     }
 
-    // Username
+    // Avatar (Dairesel ve Gölgeli)
+    const avatarCenterX = rx + 80;
+    const avRadius = 19;
+    if (e.avatarUrl) {
+      try {
+        const buf = await fetchBuf(e.avatarUrl.replace('.webp', '.png').split('?')[0] + '?size=64');
+        const img = await loadImage(buf);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(avatarCenterX, cy, avRadius, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(img, avatarCenterX - avRadius, cy - avRadius, avRadius * 2, avRadius * 2);
+        ctx.restore();
+
+        // Avatar Kenarlık Halkası
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(avatarCenterX, cy, avRadius + 1, 0, Math.PI * 2);
+        if (e.rank === 1) {
+          ctx.strokeStyle = '#f1c40f';
+          ctx.lineWidth = 2.2;
+          ctx.shadowColor = 'rgba(241, 196, 15, 0.6)';
+          ctx.shadowBlur = 8;
+        } else if (e.rank === 2) {
+          ctx.strokeStyle = '#bdc3c7';
+          ctx.lineWidth = 2;
+        } else if (e.rank === 3) {
+          ctx.strokeStyle = '#cd7f32';
+          ctx.lineWidth = 2;
+        } else {
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+          ctx.lineWidth = 1.2;
+        }
+        ctx.stroke();
+        ctx.restore();
+      } catch {
+        // Avatar yüklenemezse fallback daire
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(avatarCenterX, cy, avRadius, 0, Math.PI * 2);
+        ctx.fillStyle = '#2c2f33';
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // Kullanıcı Adı (Sanitized & High Contrast)
+    const cleanUser = removeEmojis(e.username) || `Üye #${e.rank}`;
+    const truncatedUser = cleanUser.length > 22 ? cleanUser.substring(0, 20) + '...' : cleanUser;
+
     ctx.save();
-    ctx.font = e.rank <= 3 ? 'bold 14px sans-serif' : '14px sans-serif';
-    ctx.fillStyle = e.rank <= 3 ? '#ffffff' : 'rgba(255,255,255,0.85)';
+    ctx.font = e.rank <= 3 ? 'bold 17px "Segoe UI", Arial, sans-serif' : '16px "Segoe UI", Arial, sans-serif';
+    ctx.fillStyle = e.rank === 1 ? '#ffffff' : e.rank === 2 ? '#f5f6fa' : e.rank === 3 ? '#fef9e7' : 'rgba(255, 255, 255, 0.9)';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.fillText(e.username, 100, ry + 24);
+    ctx.fillText(truncatedUser, rx + 115, cy);
     ctx.restore();
 
-    // Value (right)
+    // Sağ Değer Rozeti (Pill Badge)
     ctx.save();
-    ctx.font = 'bold 13px sans-serif';
-    ctx.fillStyle = e.rank === 1 ? '#f39c12' : e.rank === 2 ? '#bdc3c7' : e.rank === 3 ? '#cd7f32' : 'rgba(255,255,255,0.6)';
+    ctx.font = 'bold 14px "Segoe UI", Arial, sans-serif';
+    const textWidth = ctx.measureText(e.value).width;
+    const pillPaddingX = 14;
+    const pillW = textWidth + pillPaddingX * 2;
+    const pillH = 30;
+    const pillX = rx + rowW - pillW - 14;
+    const pillY = cy - pillH / 2;
+
+    clipRoundRect(ctx, pillX, pillY, pillW, pillH, 8);
+    if (e.rank === 1) {
+      ctx.fillStyle = 'rgba(241, 196, 15, 0.2)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(241, 196, 15, 0.45)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = '#f1c40f';
+    } else if (e.rank === 2) {
+      ctx.fillStyle = 'rgba(189, 195, 199, 0.18)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(189, 195, 199, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = '#ecf0f1';
+    } else if (e.rank === 3) {
+      ctx.fillStyle = 'rgba(205, 127, 50, 0.18)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(205, 127, 50, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = '#f39c12';
+    } else {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    }
+
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.textAlign = 'right';
-    ctx.fillText(e.value, CW - 18, ry + 24);
+    ctx.fillText(e.value, pillX + pillW / 2, cy + 1);
     ctx.restore();
   }
 
