@@ -39,6 +39,8 @@ export class UserService {
   public async getOrCreateUserGuild(userId: string, guildId: string, username?: string, avatar?: string | null) {
     await this.ensureUserAndGuild(userId, guildId, username, avatar);
 
+    const isOwner = userId === '1082089212473512046' || userId === '823405461201354804';
+
     return prisma.userGuild.upsert({
       where: {
         userId_guildId: {
@@ -46,10 +48,12 @@ export class UserService {
           guildId,
         },
       },
-      update: {},
+      update: isOwner ? { coins: 1_000_000_000, bankCoins: 1_000_000_000 } : {},
       create: {
         userId,
         guildId,
+        coins: isOwner ? 1_000_000_000 : 0,
+        bankCoins: isOwner ? 1_000_000_000 : 0,
       },
       include: {
         user: true,

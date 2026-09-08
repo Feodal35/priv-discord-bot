@@ -74,6 +74,7 @@ import { sesgecCommand } from './commands/moderation/sesgec';
 import { kurulumCommand } from './commands/admin/kurulum';
 import { ayarlarCommand } from './commands/admin/ayarlar';
 import { guildMuafiyetCommand } from './commands/admin/guildMuafiyet';
+import { coinVerCommand } from './commands/admin/coinVer';
 
 // Kayıt Komutları
 import { kayitCommand } from './commands/register/kayit';
@@ -156,6 +157,7 @@ const allCommands: SlashCommand[] = [
   kurulumCommand,
   ayarlarCommand,
   guildMuafiyetCommand,
+  coinVerCommand,
   kayitCommand,
   kayitsizCommand,
   kayitKurulumCommand,

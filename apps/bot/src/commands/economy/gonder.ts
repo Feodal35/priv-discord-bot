@@ -8,7 +8,7 @@ import {
   MessageFlags,
 } from 'discord.js';
 import { SlashCommand } from '../../types/command';
-import { economyService } from '../../services/economy.service';
+import { economyService, isBotOwner } from '../../services/economy.service';
 import { guildService } from '../../services/guild.service';
 import { createErrorEmbed } from '../../utils/embed';
 import { formatCurrency } from '@priv/shared';
@@ -39,6 +39,8 @@ export const gonderCommand: SlashCommand = {
     const amount = interaction.options.getInteger('miktar', true);
     const reason = interaction.options.getString('sebep') || undefined;
     const settings = await guildService.getGuildSettings(interaction.guild.id);
+    const isOwner = isBotOwner(interaction.user.id);
+    const isSelf = targetUser.id === interaction.user.id;
 
     if (targetUser.bot) {
       await interaction.reply({
@@ -48,7 +50,7 @@ export const gonderCommand: SlashCommand = {
       return;
     }
 
-    if (targetUser.id === interaction.user.id) {
+    if (isSelf && !isOwner) {
       await interaction.reply({
         embeds: [createErrorEmbed('Geçersiz Hedef', 'Kendine coin gönderemezsin.')],
         flags: MessageFlags.Ephemeral,
@@ -56,9 +58,9 @@ export const gonderCommand: SlashCommand = {
       return;
     }
 
-    // Bakiye kontrolü
+    // Bakiye kontrolü (Kurucu sahip muaftır)
     const balance = await economyService.getBalance(interaction.guild.id, interaction.user.id);
-    if (balance.coins < amount) {
+    if (!isOwner && balance.coins < amount) {
       await interaction.reply({
         embeds: [createErrorEmbed(
           'Yetersiz Bakiye',
@@ -69,14 +71,18 @@ export const gonderCommand: SlashCommand = {
       return;
     }
 
+    const senderBalanceText = isOwner
+      ? '👑 Sınırsız Bakiye (Kurucu Sahip)'
+      : `${formatCurrency(balance.coins)} ${settings.currencyName}`;
+
     // Onay embed'i
     const confirmEmbed = new EmbedBuilder()
-      .setColor(0xf39c12)
-      .setTitle('💸 Transfer Onayı')
+      .setColor(isOwner ? 0x9b59b6 : 0xf39c12)
+      .setTitle(isOwner ? '👑 Kurucu Sahip Coin Transferi' : '💸 Transfer Onayı')
       .setDescription(
         `**${interaction.user.username}**, aşağıdaki transferi onaylıyor musun?\n\n` +
-        `👤 **Gönderen:** ${interaction.user} (\`${formatCurrency(balance.coins)} ${settings.currencyName}\`)\n` +
-        `👤 **Alıcı:** ${targetUser}\n` +
+        `👤 **Gönderen:** ${interaction.user} (\`${senderBalanceText}\`)\n` +
+        `👤 **Alıcı:** ${targetUser}${isSelf ? ' *(Kendine)*' : ''}\n` +
         `💰 **Miktar:** \`${formatCurrency(amount)} ${settings.currencyName}\`\n` +
         (reason ? `📝 **Sebep:** *${reason}*\n` : '') +
         `\n⚠️ *Bu işlem geri alınamaz! Onaylamak için ✅ butonuna bas.*`
@@ -143,10 +149,11 @@ export const gonderCommand: SlashCommand = {
         .setColor(0x2ecc71)
         .setTitle('✅ Transfer Tamamlandı!')
         .setDescription(
-          `💸 **${formatCurrency(amount)} ${settings.currencyName}** başarıyla gönderildi!\n\n` +
-          `👤 **Alıcı:** ${targetUser}\n` +
+          `💸 **${formatCurrency(amount)} ${settings.currencyName}** başarıyla ${isSelf ? 'kendine aktarıldı' : 'gönderildi'}!\n\n` +
+          `👤 **Alıcı:** ${targetUser}${isSelf ? ' *(Kendin)*' : ''}\n` +
           `💰 **Transfer Miktarı:** \`${formatCurrency(amount)} ${settings.currencyName}\`` +
-          (reason ? `\n📝 **Sebep:** *${reason}*` : '')
+          (reason ? `\n📝 **Sebep:** *${reason}*` : '') +
+          (isOwner ? '\n👑 *(Kurucu Sahip Sınırsız Transfer)*' : '')
         )
         .setThumbnail(targetUser.displayAvatarURL({ extension: 'png', size: 128 }))
         .setTimestamp();

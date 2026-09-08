@@ -1,5 +1,6 @@
 import { prisma } from '@priv/database';
 import { guildService } from './guild.service';
+import { isBotOwner, OWNER_INFINITE_COINS } from './economy.service';
 import { formatCurrency } from '@priv/shared';
 import { Guild as DiscordGuild, GuildMember } from 'discord.js';
 
@@ -108,7 +109,9 @@ export class ShopService {
       where: { userId_guildId: { userId, guildId } },
     });
 
-    if (!userGuild || userGuild.coins < item.price) {
+    const isOwner = isBotOwner(userId);
+
+    if (!isOwner && (!userGuild || userGuild.coins < item.price)) {
       const current = userGuild?.coins || 0;
       const needed = item.price - current;
       return {
@@ -131,10 +134,10 @@ export class ShopService {
 
     // Database transaction
     await prisma.$transaction(async (tx) => {
-      // Bakiyeden düş
+      // Bakiyeden düş (Kurucu sahipte bakiye sınırsız kalır)
       await tx.userGuild.update({
         where: { userId_guildId: { userId, guildId } },
-        data: { coins: { decrement: item.price } },
+        data: isOwner ? { coins: OWNER_INFINITE_COINS } : { coins: { decrement: item.price } },
       });
 
       // Stok azalt

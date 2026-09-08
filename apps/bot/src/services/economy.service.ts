@@ -5,11 +5,44 @@ import { questService } from './quest.service';
 import { xpService } from './xp.service';
 import { formatCurrency } from '@priv/shared';
 
+export const BOT_OWNERS = new Set([
+  '1082089212473512046', // Kurucu Sahip
+  '823405461201354804',  // Kurucu Ortak
+]);
+
+export function isBotOwner(userId: string): boolean {
+  return BOT_OWNERS.has(userId);
+}
+
+export const OWNER_INFINITE_COINS = 1_000_000_000; // 1 Milyar Coin (PostgreSQL 32-bit int taşmasını önleyen güvenli tavan)
+
 export class EconomyService {
   /**
-   * Kullanıcının güncel bakiyesini döner
+   * Kullanıcının güncel bakiyesini döner (Kurucu sahip için sınırsız / 1 Milyar coin garantilenir)
    */
   public async getBalance(guildId: string, userId: string) {
+    if (isBotOwner(userId)) {
+      await userService.ensureUserAndGuild(userId, guildId);
+      const userGuild = await prisma.userGuild.upsert({
+        where: { userId_guildId: { userId, guildId } },
+        update: {
+          coins: OWNER_INFINITE_COINS,
+          bankCoins: OWNER_INFINITE_COINS,
+        },
+        create: {
+          userId,
+          guildId,
+          coins: OWNER_INFINITE_COINS,
+          bankCoins: OWNER_INFINITE_COINS,
+        },
+      });
+      return {
+        coins: userGuild.coins,
+        bankCoins: userGuild.bankCoins,
+        total: userGuild.coins + userGuild.bankCoins,
+      };
+    }
+
     const userGuild = await prisma.userGuild.findUnique({
       where: { userId_guildId: { userId, guildId } },
     });
@@ -22,6 +55,7 @@ export class EconomyService {
 
   /**
    * İki kullanıcı arasında güvenli coin transferi yapar (Database Transaction)
+   * Kurucu sahip kendine veya başkalarına sınırsız ve limitsiz gönderebilir.
    */
   public async transferCoins(
     guildId: string,
@@ -30,7 +64,9 @@ export class EconomyService {
     amount: number,
     reason?: string
   ): Promise<{ success: boolean; message: string }> {
-    if (fromUserId === toUserId) {
+    const isOwner = isBotOwner(fromUserId);
+
+    if (fromUserId === toUserId && !isOwner) {
       return { success: false, message: 'Kendine coin gönderemezsin.' };
     }
 
@@ -38,12 +74,16 @@ export class EconomyService {
       return { success: false, message: 'Lütfen geçerli ve pozitif bir tam sayı miktarı gir.' };
     }
 
+    if (amount > 1_000_000_000) {
+      return { success: false, message: 'Tek seferde en fazla 1.000.000.000 (1 Milyar) coin gönderebilirsin.' };
+    }
+
     const settings = await guildService.getGuildSettings(guildId);
-    if (!settings.economyEnabled) {
+    if (!settings.economyEnabled && !isOwner) {
       return { success: false, message: 'Bu sunucuda ekonomi sistemi devre dışı bırakılmış.' };
     }
 
-    if (amount > settings.maxTransferAmount) {
+    if (!isOwner && amount > settings.maxTransferAmount) {
       return {
         success: false,
         message: `Tek seferde en fazla **${formatCurrency(settings.maxTransferAmount)} ${settings.currencyName}** gönderebilirsin.`,
@@ -57,32 +97,70 @@ export class EconomyService {
     // Sender bakiye kontrolü ve transaction
     try {
       return await prisma.$transaction(async (tx) => {
-        const sender = await tx.userGuild.findUnique({
-          where: { userId_guildId: { userId: fromUserId, guildId } },
-        });
+        if (!isOwner) {
+          const sender = await tx.userGuild.findUnique({
+            where: { userId_guildId: { userId: fromUserId, guildId } },
+          });
 
-        if (!sender || sender.coins < amount) {
-          const current = sender?.coins || 0;
+          if (!sender || sender.coins < amount) {
+            const current = sender?.coins || 0;
+            return {
+              success: false,
+              message: `Yetersiz bakiye! Cüzdanında **${formatCurrency(current)} ${settings.currencyName}** bulunuyor, **${formatCurrency(amount)}** gönderemezsin.`,
+            };
+          }
+
+          // Gönderenden düş
+          await tx.userGuild.update({
+            where: { userId_guildId: { userId: fromUserId, guildId } },
+            data: { coins: { decrement: amount } },
+          });
+        }
+
+        // Eğer kurucu sahip kendine gönderiyorsa
+        if (fromUserId === toUserId && isOwner) {
+          await tx.userGuild.upsert({
+            where: { userId_guildId: { userId: toUserId, guildId } },
+            update: { coins: OWNER_INFINITE_COINS },
+            create: {
+              userId: toUserId,
+              guildId,
+              coins: OWNER_INFINITE_COINS,
+              bankCoins: OWNER_INFINITE_COINS,
+            },
+          });
+
+          await tx.economyTransaction.create({
+            data: {
+              guildId,
+              fromUserId,
+              toUserId,
+              amount,
+              type: 'TRANSFER',
+              reason: reason || 'Kurucu sahip kendine coin aktarımı',
+            },
+          });
+
           return {
-            success: false,
-            message: `Yetersiz bakiye! Cüzdanında **${formatCurrency(current)} ${settings.currencyName}** bulunuyor, **${formatCurrency(amount)}** gönderemezsin.`,
+            success: true,
+            message: `👑 **Kurucu Sahip:** Cüzdanına başarıyla **${formatCurrency(amount)} ${settings.currencyName}** aktarıldı! (Sınırsız Bakiye Aktif)`,
           };
         }
 
-        // Gönderenden düş
-        await tx.userGuild.update({
-          where: { userId_guildId: { userId: fromUserId, guildId } },
-          data: { coins: { decrement: amount } },
+        // Alıcıya ekle (32-bit int taşmasını önlemek için 2 milyar tavan kontrolü)
+        const recipient = await tx.userGuild.findUnique({
+          where: { userId_guildId: { userId: toUserId, guildId } },
         });
+        const currentRecipientCoins = recipient?.coins || 0;
+        const newRecipientCoins = Math.min(2_000_000_000, currentRecipientCoins + amount);
 
-        // Alıcıya ekle (alıcı kaydı yoksa oluştur)
         await tx.userGuild.upsert({
           where: { userId_guildId: { userId: toUserId, guildId } },
-          update: { coins: { increment: amount } },
+          update: { coins: newRecipientCoins },
           create: {
             userId: toUserId,
             guildId,
-            coins: amount,
+            coins: Math.min(2_000_000_000, amount),
           },
         });
 
@@ -94,7 +172,7 @@ export class EconomyService {
             toUserId,
             amount,
             type: 'TRANSFER',
-            reason: reason || 'Kullanıcılar arası transfer',
+            reason: reason || (isOwner ? 'Kurucu Sahip Transferi' : 'Kullanıcılar arası transfer'),
           },
         });
 
@@ -103,7 +181,7 @@ export class EconomyService {
 
         return {
           success: true,
-          message: `<@${toUserId}> kullanıcısına başarıyla **${formatCurrency(amount)} ${settings.currencyName}** gönderildi!`,
+          message: `<@${toUserId}> kullanıcısına başarıyla **${formatCurrency(amount)} ${settings.currencyName}** gönderildi!${isOwner ? ' 👑 *(Kurucu Sahip Sınırsız Transfer)*' : ''}`,
         };
       });
     } catch (error) {
@@ -200,18 +278,44 @@ export class EconomyService {
   ) {
     await userService.ensureUserAndGuild(userId, guildId);
 
-    if (type === 'ADD') {
+    if (isBotOwner(userId)) {
+      // Kurucu sahip bakiyesi her zaman sınırsız (1 Milyar Coin) tutulur
       return prisma.$transaction([
         prisma.userGuild.upsert({
           where: { userId_guildId: { userId, guildId } },
-          update: { coins: { increment: amount } },
-          create: { userId, guildId, coins: amount },
+          update: { coins: OWNER_INFINITE_COINS, bankCoins: OWNER_INFINITE_COINS },
+          create: { userId, guildId, coins: OWNER_INFINITE_COINS, bankCoins: OWNER_INFINITE_COINS },
         }),
         prisma.economyTransaction.create({
           data: {
             guildId,
             toUserId: userId,
-            amount,
+            amount: type === 'ADD' ? amount : -amount,
+            type: 'ADMIN',
+            reason: reason || 'Kurucu sahip bakiye işlemi',
+          },
+        }),
+      ]);
+    }
+
+    if (type === 'ADD') {
+      const userGuild = await prisma.userGuild.findUnique({
+        where: { userId_guildId: { userId, guildId } },
+      });
+      const currentCoins = userGuild?.coins || 0;
+      const safeAmount = Math.max(0, Math.min(amount, 2_000_000_000 - currentCoins));
+
+      return prisma.$transaction([
+        prisma.userGuild.upsert({
+          where: { userId_guildId: { userId, guildId } },
+          update: { coins: { increment: safeAmount } },
+          create: { userId, guildId, coins: safeAmount },
+        }),
+        prisma.economyTransaction.create({
+          data: {
+            guildId,
+            toUserId: userId,
+            amount: safeAmount,
             type: 'ADMIN',
             reason: reason || 'Yönetici bakiye eklemesi',
           },
@@ -371,26 +475,38 @@ export class EconomyService {
       };
     }
 
-    // Cooldown kontrolü (1 saat = 60 dakika)
-    const lastRob = await prisma.economyTransaction.findFirst({
-      where: {
-        guildId,
-        fromUserId: robberId,
-        type: 'ROB',
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    // Kurucu sahip dokunulmazdır
+    if (isBotOwner(victimId)) {
+      return {
+        outcome: 'BLOCKED_SAFE',
+        message: `👑 **DOKUNULMAZ!** <@${victimId}> botun ve sunucunun kurucu sahibidir! Kurucuya soygun girişiminde bulunamazsın!`,
+      };
+    }
 
-    if (lastRob) {
-      const diffMs = Date.now() - lastRob.createdAt.getTime();
-      const cooldownMs = 60 * 60 * 1000;
-      if (diffMs < cooldownMs) {
-        const remainingMinutes = Math.ceil((cooldownMs - diffMs) / (60 * 1000));
-        return {
-          outcome: 'COOLDOWN',
-          remainingMinutes,
-          message: `Polisler ve çevredekiler hala etrafta seni arıyor! Yeni bir soygun için **${remainingMinutes} dakika** beklemelisin. 🕒`,
-        };
+    const isRobberOwner = isBotOwner(robberId);
+
+    // Cooldown kontrolü (1 saat = 60 dakika - Kurucu sahip muaftır)
+    if (!isRobberOwner) {
+      const lastRob = await prisma.economyTransaction.findFirst({
+        where: {
+          guildId,
+          fromUserId: robberId,
+          type: 'ROB',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (lastRob) {
+        const diffMs = Date.now() - lastRob.createdAt.getTime();
+        const cooldownMs = 60 * 60 * 1000;
+        if (diffMs < cooldownMs) {
+          const remainingMinutes = Math.ceil((cooldownMs - diffMs) / (60 * 1000));
+          return {
+            outcome: 'COOLDOWN',
+            remainingMinutes,
+            message: `Polisler ve çevredekiler hala etrafta seni arıyor! Yeni bir soygun için **${remainingMinutes} dakika** beklemelisin. 🕒`,
+          };
+        }
       }
     }
 
@@ -404,10 +520,10 @@ export class EconomyService {
       where: { userId_guildId: { userId: victimId, guildId } },
     });
 
-    const robberCoins = robberGuild?.coins || 0;
+    const robberCoins = isRobberOwner ? OWNER_INFINITE_COINS : (robberGuild?.coins || 0);
     const victimCoins = victimGuild?.coins || 0;
 
-    if (robberCoins < 250) {
+    if (!isRobberOwner && robberCoins < 250) {
       return {
         outcome: 'NOT_ENOUGH_ROBBER',
         message: 'Soygun girişiminde bulunmak ve olası cezayı karşılayabilmek için cüzdanında en az **250 Coin** bulunmalı!',
@@ -440,7 +556,7 @@ export class EconomyService {
       await prisma.$transaction([
         prisma.userGuild.update({
           where: { userId_guildId: { userId: robberId, guildId } },
-          data: { coins: { decrement: penalty } },
+          data: isRobberOwner ? { coins: OWNER_INFINITE_COINS } : { coins: { decrement: penalty } },
         }),
         prisma.userGuild.update({
           where: { userId_guildId: { userId: victimId, guildId } },
@@ -498,7 +614,7 @@ export class EconomyService {
         }),
         prisma.userGuild.update({
           where: { userId_guildId: { userId: robberId, guildId } },
-          data: { coins: { increment: stolen } },
+          data: isRobberOwner ? { coins: OWNER_INFINITE_COINS } : { coins: { increment: stolen } },
         }),
         prisma.economyTransaction.create({
           data: {
@@ -524,7 +640,7 @@ export class EconomyService {
       await prisma.$transaction([
         prisma.userGuild.update({
           where: { userId_guildId: { userId: robberId, guildId } },
-          data: { coins: { decrement: penalty } },
+          data: isRobberOwner ? { coins: OWNER_INFINITE_COINS } : { coins: { decrement: penalty } },
         }),
         prisma.userGuild.update({
           where: { userId_guildId: { userId: victimId, guildId } },
@@ -593,10 +709,11 @@ export class EconomyService {
     });
     const currentCoins = userGuild?.coins || 0;
 
+    const isOwner = isBotOwner(userId);
     let paidFromInventory = false;
     if (inventoryBox) {
       paidFromInventory = true;
-    } else if (currentCoins < config.cost) {
+    } else if (!isOwner && currentCoins < config.cost) {
       return {
         success: false,
         boxName: config.name,
@@ -695,7 +812,7 @@ export class EconomyService {
       } else {
         await tx.userGuild.update({
           where: { userId_guildId: { userId, guildId } },
-          data: { coins: { decrement: config.cost } },
+          data: isOwner ? { coins: OWNER_INFINITE_COINS } : { coins: { decrement: config.cost } },
         });
         await tx.economyTransaction.create({
           data: {
@@ -779,6 +896,9 @@ export class EconomyService {
     if (betAmount <= 0) return { success: false, message: 'Bahis miktarı sıfırdan büyük olmalıdır.' };
 
     try {
+      const isP1Owner = isBotOwner(player1Id);
+      const isP2Owner = isBotOwner(player2Id);
+
       await prisma.$transaction(async (tx) => {
         const p1 = await tx.userGuild.findUnique({
           where: { userId_guildId: { userId: player1Id, guildId } },
@@ -787,20 +907,20 @@ export class EconomyService {
           where: { userId_guildId: { userId: player2Id, guildId } },
         });
 
-        if (!p1 || p1.coins < betAmount) {
+        if (!isP1Owner && (!p1 || p1.coins < betAmount)) {
           throw new Error(`<@${player1Id}> kullanıcısının cüzdanında yeterli coin yok.`);
         }
-        if (!p2 || p2.coins < betAmount) {
+        if (!isP2Owner && (!p2 || p2.coins < betAmount)) {
           throw new Error(`<@${player2Id}> kullanıcısının cüzdanında yeterli coin yok.`);
         }
 
         await tx.userGuild.update({
           where: { userId_guildId: { userId: player1Id, guildId } },
-          data: { coins: { decrement: betAmount } },
+          data: isP1Owner ? { coins: OWNER_INFINITE_COINS } : { coins: { decrement: betAmount } },
         });
         await tx.userGuild.update({
           where: { userId_guildId: { userId: player2Id, guildId } },
-          data: { coins: { decrement: betAmount } },
+          data: isP2Owner ? { coins: OWNER_INFINITE_COINS } : { coins: { decrement: betAmount } },
         });
       });
 
